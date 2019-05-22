@@ -4,11 +4,15 @@ import os
 conn = psycopg2.connect(dbname=os.environ['DBNAME'], user=os.environ['USER'], password=os.environ['PASSWORD'], host=os.environ['HOST'])
 cur = conn.cursor()
 
+cur.execute("DROP TABLE players")
+
 cur.execute("""CREATE TABLE players(
   player_id SERIAL PRIMARY KEY,
   username TEXT NOT NULL,
   auth0_sub TEXT NOT NULL
 );""")
+
+cur.execute("DROP TABLE rooms")
 
 cur.execute("""CREATE TABLE rooms(
   room_id SERIAL PRIMARY KEY,
@@ -19,7 +23,8 @@ cur.execute("""CREATE TABLE rooms(
   player2value INT,
   player3 TEXT,
   player3value INT,
-  board TEXT NOT NULL
+  board TEXT NOT NULL,
+  complete TEXT NOT NULL
 );""")
 
 
