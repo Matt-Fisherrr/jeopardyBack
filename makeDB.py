@@ -9,7 +9,7 @@ cur.execute("DROP TABLE players")
 cur.execute("""CREATE TABLE players(
   player_id SERIAL PRIMARY KEY,
   username TEXT NOT NULL,
-  auth0_sub TEXT NOT NULL
+  auth0_code TEXT NOT NULL
 );""")
 
 cur.execute("DROP TABLE rooms")
@@ -24,7 +24,8 @@ cur.execute("""CREATE TABLE rooms(
   player3 TEXT,
   player3value INT,
   board TEXT NOT NULL,
-  complete TEXT NOT NULL
+  started INT NOT NULL,
+  complete INT NOT NULL
 );""")
 
 

@@ -5,13 +5,13 @@ from threading import Lock
 from jose import jwt
 from six.moves.urllib.request import urlopen
 from functools import wraps
-import json, psycopg2, os, hashlib, requests, random, datetime
+import json, psycopg2, os, hashlib, requests, random, datetime, copy
 
 conn = psycopg2.connect(dbname=os.environ['DBNAME'], user=os.environ['USER'], password=os.environ['PASSWORD'], host=os.environ['HOST'])
 cur = conn.cursor()
 
 app = Flask(__name__)
-socketio = SocketIO(app, async_mode=None)
+socketio = SocketIO(app, async_mode='eventlet')
 # CORS(app)
 
 AUTH0_DOMAIN = 'dev-0fw6q03t.auth0.com'
@@ -24,6 +24,7 @@ connected_users = {}
 
 room_list = {}
 ping_list = {}
+numbers = ['zero', 'one', 'two', 'three']
 
 thread = None
 thread_lock = Lock()
@@ -32,23 +33,29 @@ thread_lock = Lock()
 # 1:{
 # 'name':'name',
 # 'room_id':1,
-# 'ping_time':'time',
+# 'board': {}
+# 'active_player':0,
+# 'started':false,
 # 'players':{
 #     'count':3,
+#     'ready_count':0
 #     'one':{
 #         'auth0_code':'auth_0 code',
 #         'score':0,
-#         'ping':72
+#         'ping':72,
+#         'ready':False
 #     },
 #     'two':{
 #         'auth0_code':'auth_0 code',
 #         'score':0,
 #         'ping':73
+#         'ready':False
 #     },
 #     'thee':{
 #         'auth0_code':'auth_0 code',
 #         'score':0,
 #         'ping':74
+#         'ready':False
 #     }
 # },
 # 'viewers':['auth_0 code','auth_0 code','auth_0 code','auth_0 code']
@@ -169,7 +176,7 @@ def connect():
     access_token = get_token_auth_header()
     id_decode = jwt.decode(id_token, jwks, algorithms=ALGORITHMS, audience="3eCEPx9I6Wr0N3FIJAwXXi5caFdRfZzV", access_token=access_token)
     hashed_id = str(hashlib.sha512(id_decode['sub'].encode('utf-8') + SALT).hexdigest())
-    cur.execute("SELECT username FROM players WHERE auth0_sub = %s", (hashed_id,))
+    cur.execute("SELECT username FROM players WHERE auth0_code = %s", (hashed_id,))
     username = cur.fetchone()
     connected_users[access_token] = {'access_token':access_token, 'id_token':id_token, 'auth0_code':hashed_id, 'username':username}
     if username == None:
@@ -184,11 +191,11 @@ def set_username():
     global jwks, ALGORITHMS, SALT, connected_users
     access_token = get_token_auth_header()
     username = request.get_json()['user']
-    cur.execute("SELECT count(auth0_sub) FROM players WHERE auth0_sub = %s", (connected_users[access_token]['auth0_code'],))
+    cur.execute("SELECT count(auth0_code) FROM players WHERE auth0_code = %s", (connected_users[access_token]['auth0_code'],))
     if cur.fetchone()[0] == 0:
-        cur.execute("INSERT INTO players(username, auth0_sub) VALUES (%s, %s)", (username, connected_users[access_token]['auth0_code']))
+        cur.execute("INSERT INTO players(username, auth0_code) VALUES (%s, %s)", (username, connected_users[access_token]['auth0_code']))
     else:
-        cur.execute("UPDATE players SET username = %s WHERE auth0_sub = %s", (username, connected_users[access_token]['auth0_code']))
+        cur.execute("UPDATE players SET username = %s WHERE auth0_code = %s", (username, connected_users[access_token]['auth0_code']))
     conn.commit()
     return jsonify({'response': True, 'username': username})
 
@@ -200,10 +207,11 @@ def get_room_list():
     access_token = get_token_auth_header()
     rooms = []
     for room in room_list:
-        rooms.append({'name':room_list[room]['name'], 'id':room_list[room]['room_id'], 'players':room_list[room]['players']['count']})
-    cur.execute("SELECT room_name, room_id, player1, player2, player3 FROM rooms WHERE player1 = %s AND complete = 'False'",(connected_users[access_token]['auth0_code'],))
+        rooms.append({'name':room_list[room]['name'], 'id':room_list[room]['room_id'], 'players':'started' if room_list[room]['started'] else room_list[room]['players']['count']})
+    cur.execute("SELECT room_name, room_id, player1, player2, player3, started FROM rooms WHERE player1 = %s AND complete = 0",(connected_users[access_token]['auth0_code'],))
     for room in cur.fetchall():
-        rooms.append({'name':room[0], 'id':room[1], 'players':'started'})
+        if room[1] not in list(room_list.keys()):
+            rooms.append({'name':room[0], 'id':room[1], 'players':'started' if room[5] == 1 else len([p for p in room[2:4] if p != None])})
     return jsonify(rooms)
 
 @app.route('/api/roomlist/create', methods=['POST'])
@@ -233,22 +241,26 @@ def make_room():
         new_board[key] = []
         for arr in board[key]:
             new_board[key].append({'id':arr['id'], 'value':arr['value'], 'question':arr['question'], 'answered':False})
-    cur.execute("INSERT INTO rooms(room_name, board, player1, complete) VALUES (%s,%s,%s, 'False')",(room_name,json.dumps(new_board),connected_users[access_token]['auth0_code']))
+    cur.execute("INSERT INTO rooms(room_name, board, player1, started, complete) VALUES (%s,%s,%s, 0, 0)",(room_name,json.dumps(new_board),connected_users[access_token]['auth0_code']))
     cur.execute('SELECT room_id FROM rooms WHERE room_name = %s',(room_name,))
     room_id = int(cur.fetchone()[0])
     room_list[room_id] = {
         'name':room_name,
         'room_id':room_id,
         'board':new_board,
+        'started':False,
         'players':{
             'count':1,
             'one':{
                 'auth0_code':connected_users[access_token]['auth0_code'],
                 'score':0
-            }
+            },
+            'two':{},
+            'three':{}
         },
         'viewers':[]
     }
+    conn.commit()
     return jsonify({"room_id":room_id})
 
 @app.route('/api/roomlist/getboard', methods=['GET'])
@@ -256,6 +268,7 @@ def make_room():
 @requires_auth
 def get_board():
     global room_list, connected_users
+    access_token = get_token_auth_header()
     room_id = int(request.headers['room_id'])
     try:
         board = room_list[room_id]['board']
@@ -263,26 +276,34 @@ def get_board():
         cur.execute("SELECT board, room_name, player1, player1value, player2, player2value, player3, player3value  FROM rooms WHERE room_id = %s",(room_id,))
         board, room_name, player1, player1value, player2, player2value, player3, player3value = cur.fetchone()
         board = json.loads(board)
-        players = {}
+        players = {
+            'one':{},
+            'two':{},
+            'three':{}
+        }
         if player1 != None:
             players['count'] = players.get('count',0) + 1
-            players['one'] = {}
             players['one']['auth0_code'] = player1
             players['one']['score'] = player1value
+            if players['one']['auth0_code'] == connected_users[access_token]['auth0_code']:
+                connected_users['player_num'] = 'one'
         if player2 != None:
             players['count'] = players.get('count',0) + 1
-            players['two'] = {}
             players['two']['auth0_code'] = player2
             players['two']['score'] = player2value
+            if players['two']['auth0_code'] == connected_users[access_token]['auth0_code']:
+                connected_users['player_num'] = 'two'
         if player3 != None:
             players['count'] = players.get('count',0) + 1
-            players['three'] = {}
             players['three']['auth0_code'] = player3
             players['three']['score'] = player3value
+            if players['three']['auth0_code'] == connected_users[access_token]['auth0_code']:
+                connected_users['player_num'] = 'three'
         room_list[room_id] = {
             'name':room_name,
             'room_id':room_id,
             'board':board,
+            'started':False,
             'players': players,
             'viewers':[]
         }
@@ -291,22 +312,30 @@ def get_board():
 
 req_ids = {}  
 
+def ping_check():
+    global room_list, ping_list, socketio
+    ping_count = 0
+    while True:
+        socketio.sleep(10)
+        ping_list[ping_count] = datetime.datetime.now()
+        socketio.emit('ping_check', {'ping_num':ping_count}, namespace='/jep', room='players')
+        ping_count = ping_count + 1
+
 class jeopardy_socket(Namespace):
 
-    def ping_check(self):
-        global room_list, ping_list
-        ping_count = 0
-        while len(room_list) > 0:
-            socketio.sleep(1)
-            ping_list[ping_count] = datetime.datetime.now()
-            emit('ping_check', {'ping_num':ping_count}, room='players')
-
+    def on_pong_res(self, message):
+        global room_list, ping_list, req_ids
+        pos = req_ids[request.sid]['player_num']
+        diff = datetime.datetime.now() - ping_list[message['ping_num']]
+        ping = round((diff.microseconds / 10**6 + diff.seconds) * 1000)
+        room_list[req_ids[request.sid]['room_id']]['players'][pos]['ping'].append(ping) 
+        print(sum(room_list[req_ids[request.sid]['room_id']]['players'][pos]['ping']) // len(room_list[req_ids[request.sid]['room_id']]['players'][pos]['ping']))
 
     def on_connect(self):
-        global thread, room_list
+        global thread
         with thread_lock:
             if thread is None:
-                thread = socketio.start_background_task(self.ping_check)
+                thread = socketio.start_background_task(ping_check)
 
     def on_disconnect(self):
         # global room_list, connected_users
@@ -316,66 +345,102 @@ class jeopardy_socket(Namespace):
         # if room_list[message['room_id']]['count'] == 0 and len(room_list[message['room_id']]['viewers']) == 0:
         #     del room_list[message['room_id']]
         pass
-    
-    def on_pong_res(self, message):
-        global room_list, ping_list, req_ids
-        diff = datetime.datetime.now() - ping_list[message['ping_num']]
-        round((diff.microseconds / 10**6 + diff.seconds) * 1000)
-        print(req_ids)
 
     def on_join_room(self,message):
-        global room_list, connected_users, req_ids
+        try:
+            global room_list, connected_users, req_ids
 
-        room_id = message['room_id']
-        access_token = message['access_token']
-        req_ids[request.sid] = connected_users[access_token]
+            room_id = message['room_id']
+            access_token = message['access_token']
+            req_ids[request.sid] = connected_users[access_token]
 
-        join_room(str(room_id))
+            join_room(str(room_id))
 
-        room_list[room_id]['viewers'].append(connected_users[access_token]['auth0_code'])
-        connected_users[access_token]['sid'] = request.sid
-        connected_users[access_token]['room_id'] = room_id
-        room = room_list[room_id]
-        room['players'] = room.get('players',{})
-        room['players']['one'] = room['players'].get('one',{})
-        room['players']['two'] = room['players'].get('two',{})
-        room['players']['three'] = room['players'].get('three',{})
+            room_list[room_id]['viewers'].append(req_ids[request.sid]['username'])
+            req_ids[request.sid]['sid'] = request.sid
+            req_ids[request.sid]['room_id'] = room_id
 
-        for pos in room['players']:
-            if pos != 'count':
-                cur.execute("SELECT username FROM players WHERE auth0_sub = %s",(room['players'][pos].get('auth0_code','0'),))
-                try:
-                    room['players'][pos]['username'] = cur.fetchone()[0]
-                    room['players'][pos]['score'] = 0
-                except:
-                    room['players'][pos]['username'] = ""
-                    room['players'][pos]['score'] = 0
-                try:
-                    del room['players'][pos]['auth0_code']
-                except:
-                    pass
-        emit('has_joined_room', {'room_list':room}, room=str(room_id))
+            cur.execute("SELECT player_id FROM players WHERE auth0_code = %s",(req_ids[request.sid]['auth0_code'],))
+            req_ids[request.sid]['player_id'] = cur.fetchone()[0]
+
+            if room_list[room_id].get('started', False,) == False:
+                room_list[room_id]['active_player'] = 0
+            if room_list[room_id].get('players',None) == None:
+                room_list[room_id]['players'] = room_list[room_id].get('players',{})
+            room_list[room_id]['players']['one'] = room_list[room_id]['players'].get('one',{})
+            room_list[room_id]['players']['two'] = room_list[room_id]['players'].get('two',{})
+            room_list[room_id]['players']['three'] = room_list[room_id]['players'].get('three',{})
+            if room_list[room_id].get('init', None) == None:
+                for pos in room_list[room_id]['players']:
+                    if pos != 'count':
+                        room_list[req_ids[request.sid]['room_id']]['players'][pos]['ping'] = []
+                        cur.execute("SELECT username FROM players WHERE auth0_code = %s",(room_list[room_id]['players'][pos].get('auth0_code','0'),))
+                        try:
+                            room_list[room_id]['players'][pos]['username'] = cur.fetchone()[0]
+                            room_list[room_id]['players'][pos]['score'] = 0
+                        except:
+                            room_list[room_id]['players'][pos]['username'] = ""
+                            room_list[room_id]['players'][pos]['score'] = 0
+                room_list[room_id]['init'] = True
+            room = copy.deepcopy(room_list[room_id])
+            for pos in room['players']:
+                if pos == 'one' or pos == 'two' or pos == 'three':
+                    if room['players'][pos].get('auth0_code', None) != None:
+                        del room['players'][pos]['auth0_code']
+                        if room_list[room_id]['players'][pos]['auth0_code'] == req_ids[request.sid]['auth0_code']:
+                            req_ids[request.sid]['player_num'] = pos
+                            room_list[room_id]['viewers'].remove(req_ids[request.sid]['username'])
+                            join_room('players')
+            emit('has_joined_room', {'room_list':room, 'position':req_ids[request.sid].get('player_num',0), 'player_id':req_ids[request.sid]['player_id']})
+        except:
+            emit('error')
+            
+
+    def on_viewer_joined(self):
+        global req_ids, room_list
+        room_id = req_ids[request.sid]['room_id']
+        emit('viewer_added', { 'viewers':len(room_list[room_id]['viewers'])}, room=str(room_id))
 
     def on_player_select(self,message):
-        global room_list, connected_users
+        global room_list, connected_users ,req_ids
 
-        access_token = message['access_token']
         position = message['position']
-        room_id = connected_users[access_token]['room_id']
-
-        join_room('players')
+        room_id = req_ids[request.sid]['room_id']
+        auth0_code = req_ids[request.sid]['auth0_code']
         
-        if room_list[room_id]['players'].get(position,None) == None:
-            print("this")
-            room_list[room_id]['players'][position] = {}
-            room_list[room_id]['players'][position]['auth0_code'] = connected_users[access_token]['auth0_code']
-            connected_users[access_token]['player_num'] = position
-            room_list[room_id]['players']['count'] = room_list[room_id]['players'].get('count',0) + 1
-            emit('player_selected',{'username':connected_users[access_token]['username'],'position':position}, room=str(room_id))
+        if req_ids[request.sid].get('player_num',None) == None:
+            if room_list[room_id]['players'][position]['username'] == "" and room_list[room_id].get('started', False) == False:
+                room_list[room_id]['viewers'].remove(req_ids[request.sid]['username'])
+                join_room('players')
+                room_list[room_id]['players'][position]['auth0_code'] = auth0_code
+                cur.execute("SELECT username FROM players WHERE auth0_code = %s",(room_list[room_id]['players'][position].get('auth0_code','0'),))
+                room_list[room_id]['players'][position] = {}
+                room_list[room_id]['players'][position]['username'] = cur.fetchone()[0]
+                req_ids[request.sid]['player_num'] = position
+                room_list[room_id]['players']['count'] = room_list[room_id]['players'].get('count',0) + 1
+                emit('player_selected',{'username':req_ids[request.sid]['username'],'position':position, 'player_id':req_ids[request.sid]['player_id']}, room=str(room_id))
+
+    def on_player_ready(self, message):
+        global room_list, connected_users, req_ids
+        room_id = req_ids[request.sid]['room_id']
+        pos = req_ids[request.sid]['player_num']
+        if room_list[room_id]['players'][pos].get('ready',False) == False:
+            room_list[room_id]['players'][pos]['ready'] = True
+            room_list[room_id]['players']['ready_count'] = room_list[room_id]['players'].get('ready_count', 0) + 1
+        else:
+            room_list[room_id]['players'][pos]['ready'] = False
+            room_list[room_id]['players']['ready_count'] = room_list[room_id]['players']['ready_count'] - 1
+        if room_list[room_id]['players'].get('ready_count', 0) == room_list[room_id]['players']['count']:
+            room_list[room_id]['started'] = True
+            room_list[room_id]['active_player'] = 1
+            emit('ready_player', { 'position':pos,'ready':room_list[room_id]['players'][pos]['ready'], 'started': True, 'active_player': room_list[room_id]['active_player']}, room=str(room_id))
+        else:
+            emit('ready_player', { 'position':pos,'ready':room_list[room_id]['players'][pos]['ready'], 'started': False}, room=str(room_id))
+
 
     def on_test(self, message):
         print(message['data'])
-        emit('test',{'test':'test'})
+        emit('test', {'test':'test'})
         
 
 socketio.on_namespace(jeopardy_socket('/jep'))
