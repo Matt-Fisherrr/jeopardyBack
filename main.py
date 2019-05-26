@@ -5,7 +5,7 @@ from threading import Lock
 from jose import jwt
 from six.moves.urllib.request import urlopen
 from functools import wraps
-import json, psycopg2, os, hashlib, requests, random, datetime, copy
+import json, psycopg2, os, hashlib, requests, random, datetime, copy, re
 
 conn = psycopg2.connect(dbname=os.environ['DBNAME'], user=os.environ['USER'], password=os.environ['PASSWORD'], host=os.environ['HOST'])
 cur = conn.cursor()
@@ -28,38 +28,51 @@ numbers = ['zero', 'one', 'two', 'three']
 
 thread = None
 thread_lock = Lock()
+thread_lock_back = Lock()
+thread_lock_buzz = Lock()
 
 # Room list format
-# 1:{
-# 'name':'name',
-# 'room_id':1,
-# 'board': {}
-# 'active_player':0,
-# 'started':false,
-# 'players':{
-#     'count':3,
-#     'ready_count':0
-#     'one':{
-#         'auth0_code':'auth_0 code',
-#         'score':0,
-#         'ping':72,
-#         'ready':False
-#     },
-#     'two':{
-#         'auth0_code':'auth_0 code',
-#         'score':0,
-#         'ping':73
-#         'ready':False
-#     },
-#     'thee':{
-#         'auth0_code':'auth_0 code',
-#         'score':0,
-#         'ping':74
-#         'ready':False
-#     }
-# },
-# 'viewers':['auth_0 code','auth_0 code','auth_0 code','auth_0 code']
-# }
+room_template = {
+    'name':'',
+    'room_id':0,
+    'board': {},
+    'selected_board':'',
+    'active_player':0,
+    'started':False,
+    'selected_time':None,
+    'buzzedIn':0,
+    'buzz_background':None,
+    'buzzed_in_back':None,
+    'buzzedPlayerTimes':{
+        'one':'',
+        'two':'',
+        'three':''
+    },
+    'players':{
+        'count':0,
+        'total_count':0,
+        'ready_count':0,
+        'one':{
+            'auth0_code':'',
+            'score':0,
+            'ping':0,
+            'ready':False
+        },
+        'two':{
+            'auth0_code':'',
+            'score':0,
+            'ping':0,
+            'ready':False
+        },
+        'thee':{
+            'auth0_code':'',
+            'score':0,
+            'ping':0,
+            'ready':False
+        }
+    },
+    'viewers':[]
+}
 
 class AuthError(Exception):
     def __init__(self, error, status_code):
@@ -207,7 +220,7 @@ def get_room_list():
     access_token = get_token_auth_header()
     rooms = []
     for room in room_list:
-        rooms.append({'name':room_list[room]['name'], 'id':room_list[room]['room_id'], 'players':'started' if room_list[room]['started'] else room_list[room]['players']['count']})
+        rooms.append({'name':room_list[room]['name'], 'id':room_list[room]['room_id'], 'players':'started' if room_list[room]['started'] else room_list[room]['players']['total_count']})
     cur.execute("SELECT room_name, room_id, player1, player2, player3, started FROM rooms WHERE player1 = %s AND complete = 0",(connected_users[access_token]['auth0_code'],))
     for room in cur.fetchall():
         if room[1] not in list(room_list.keys()):
@@ -218,7 +231,7 @@ def get_room_list():
 @cross_origin(headers=['Content-Type', 'Authorization'])
 @requires_auth
 def make_room():
-    global room_list, connected_users
+    global room_list, connected_users, room_template
     room_name = request.get_json()['roomName']
     access_token = get_token_auth_header()
     # values = [200, 400, 600, 800, 1000]
@@ -238,19 +251,21 @@ def make_room():
     board = {'hairy it': [{'id': 82119, 'answer': 'an anteater', 'question': 'Seen here, this mammal is all mouth & no teeth', 'value': 200, 'airdate': '2006-11-03T12:00:00.000Z', 'created_at': '2014-02-11T23:40:34.632Z', 'updated_at': '2014-02-11T23:40:34.632Z', 'category_id': 10797, 'game_id': None, 'invalid_count': None, 'category': {'id': 10797, 'title': 'hairy it', 'created_at': '2014-02-11T23:40:34.430Z', 'updated_at': '2014-02-11T23:40:34.430Z', 'clues_count': 5}}, {'id': 82125, 'answer': 'a skunk', 'question': "This small mammal, Mephitis mephitis, can spray musk accurately as far as 12 feet (& it ain't the Jovan kind)", 'value': 400, 'airdate': '2006-11-03T12:00:00.000Z', 'created_at': '2014-02-11T23:40:34.800Z', 'updated_at': '2014-02-11T23:40:34.800Z', 'category_id': 10797, 'game_id': None, 'invalid_count': None, 'category': {'id': 10797, 'title': 'hairy it', 'created_at': '2014-02-11T23:40:34.430Z', 'updated_at': '2014-02-11T23:40:34.430Z', 'clues_count': 5}}, {'id': 82131, 'answer': 'a guinea pig', 'question': 'You think you can experiment with a clue like it was some kind of this rodent, seen here?', 'value': 600, 'airdate': '2006-11-03T12:00:00.000Z', 'created_at': '2014-02-11T23:40:34.964Z', 'updated_at': '2014-02-11T23:40:34.964Z', 'category_id': 10797, 'game_id': None, 'invalid_count': None, 'category': {'id': 10797, 'title': 'hairy it', 'created_at': '2014-02-11T23:40:34.430Z', 'updated_at': '2014-02-11T23:40:34.430Z', 'clues_count': 5}}, {'id': 82137, 'answer': 'a gorilla', 'question': 'There are 3 kinds of this animal: western lowland, eastern lowland & mountain', 'value': 800, 'airdate': '2006-11-03T12:00:00.000Z', 'created_at': '2014-02-11T23:40:35.128Z', 'updated_at': '2014-02-11T23:40:35.128Z', 'category_id': 10797, 'game_id': None, 'invalid_count': None, 'category': {'id': 10797, 'title': 'hairy it', 'created_at': '2014-02-11T23:40:34.430Z', 'updated_at': '2014-02-11T23:40:34.430Z', 'clues_count': 5}}, {'id': 82143, 'answer': 'a bighorn sheep', 'question': 'This species seen here is found only in North America', 'value': 1000, 'airdate': '2006-11-03T12:00:00.000Z', 'created_at': '2014-02-11T23:40:35.292Z', 'updated_at': '2014-02-11T23:40:35.292Z', 'category_id': 10797, 'game_id': None, 'invalid_count': None, 'category': {'id': 10797, 'title': 'hairy it', 'created_at': '2014-02-11T23:40:34.430Z', 'updated_at': '2014-02-11T23:40:34.430Z', 'clues_count': 5}}], 'mixing apples & oranges': [{'id': 107828, 'answer': 'William Tell', 'question': 'An apple & a crossbow play important roles in this 1804 Schiller tale', 'value': 200, 'airdate': '2010-10-04T12:00:00.000Z', 'created_at': '2014-02-14T02:14:40.567Z', 'updated_at': '2014-02-14T02:14:40.567Z', 'category_id': 14598, 'game_id': None, 'invalid_count': None, 'category': {'id': 14598, 'title': 'mixing apples & oranges', 'created_at': '2014-02-14T02:14:40.342Z', 'updated_at': '2014-02-14T02:14:40.342Z', 'clues_count': 5}}, {'id': 107834, 'answer': 'Agent Orange', 'question': 'This 2-word Vietnam War item consisted of 2 weedkillers--2,4-D & 2,4,5-T', 'value': 400, 'airdate': '2010-10-04T12:00:00.000Z', 'created_at': '2014-02-14T02:14:40.815Z', 'updated_at': '2014-02-14T02:14:40.815Z', 'category_id': 14598, 'game_id': None, 'invalid_count': None, 'category': {'id': 14598, 'title': 'mixing apples & oranges', 'created_at': '2014-02-14T02:14:40.342Z', 'updated_at': '2014-02-14T02:14:40.342Z', 'clues_count': 5}}, {'id': 107840, 'answer': 'mistletoe', 'question': 'The European type of this holiday plant seen here grows most often on apple trees', 'value': 600, 'airdate': '2010-10-04T12:00:00.000Z', 'created_at': '2014-02-14T02:14:41.097Z', 'updated_at': '2014-02-14T02:14:41.097Z', 'category_id': 14598, 'game_id': None, 'invalid_count': None, 'category': {'id': 14598, 'title': 'mixing apples & oranges', 'created_at': '2014-02-14T02:14:40.342Z', 'updated_at': '2014-02-14T02:14:40.342Z', 'clues_count': 5}}, {'id': 107846, 'answer': 'Tasmania', 'question': 'Have a devil of a time in this smallest state in Australia, often called the Apple Isle', 'value': 800, 'airdate': '2010-10-04T12:00:00.000Z', 'created_at': '2014-02-14T02:14:41.395Z', 'updated_at': '2014-02-14T02:14:41.395Z', 'category_id': 14598, 'game_id': None, 'invalid_count': None, 'category': {'id': 14598, 'title': 'mixing apples & oranges', 'created_at': '2014-02-14T02:14:40.342Z', 'updated_at': '2014-02-14T02:14:40.342Z', 'clues_count': 5}}, {'id': 107852, 'answer': 'the Orange Bowl Stadium', 'question': 'This Florida sports & concert venue was demolished in 2008', 'value': 1000, 'airdate': '2010-10-04T12:00:00.000Z', 'created_at': '2014-02-14T02:14:41.685Z', 'updated_at': '2014-02-14T02:14:41.685Z', 'category_id': 14598, 'game_id': None, 'invalid_count': None, 'category': {'id': 14598, 'title': 'mixing apples & oranges', 'created_at': '2014-02-14T02:14:40.342Z', 'updated_at': '2014-02-14T02:14:40.342Z', 'clues_count': 5}}], '"it" is a 7-letter word': [{'id': 92049, 'answer': 'brevity', 'question': 'Proverbially, this "is the soul of wit"', 'value': 200, 'airdate': '2008-12-31T12:00:00.000Z', 'created_at': '2014-02-14T01:57:40.927Z', 'updated_at': '2014-02-14T01:57:40.927Z', 'category_id': 12204, 'game_id': None, 'invalid_count': None, 'category': {'id': 12204, 'title': '"it" is a 7-letter word', 'created_at': '2014-02-14T01:57:40.721Z', 'updated_at': '2014-02-14T01:57:40.721Z', 'clues_count': 5}}, {'id': 92055, 'answer': 'a citizen', 'question': 'A native or naturalized member of a state or nation', 'value': 400, 'airdate': '2008-12-31T12:00:00.000Z', 'created_at': '2014-02-14T01:57:41.139Z', 'updated_at': '2014-02-14T01:57:41.139Z', 'category_id': 12204, 'game_id': None, 'invalid_count': None, 'category': {'id': 12204, 'title': '"it" is a 7-letter word', 'created_at': '2014-02-14T01:57:40.721Z', 'updated_at': '2014-02-14T01:57:40.721Z', 'clues_count': 5}}, {'id': 92061, 'answer': 'a blitzer', 'question': "A marauding linebacker, or CNN's Wolf", 'value': 600, 'airdate': '2008-12-31T12:00:00.000Z', 'created_at': '2014-02-14T01:57:41.353Z', 'updated_at': '2014-02-14T01:57:41.353Z', 'category_id': 12204, 'game_id': None, 'invalid_count': None, 'category': {'id': 12204, 'title': '"it" is a 7-letter word', 'created_at': '2014-02-14T01:57:40.721Z', 'updated_at': '2014-02-14T01:57:40.721Z', 'clues_count': 5}}, {'id': 92067, 'answer': 'an epitaph', 'question': 'A notable one of these read, "Here lies Ann Mann, who lived an old maid but died an old Mann"', 'value': 800, 'airdate': '2008-12-31T12:00:00.000Z', 'created_at': '2014-02-14T01:57:41.556Z', 'updated_at': '2014-02-14T01:57:41.556Z', 'category_id': 12204, 'game_id': None, 'invalid_count': None, 'category': {'id': 12204, 'title': '"it" is a 7-letter word', 'created_at': '2014-02-14T01:57:40.721Z', 'updated_at': '2014-02-14T01:57:40.721Z', 'clues_count': 5}}, {'id': 92073, 'answer': 'the Kitchen Cabinet', 'question': 'Nickname of Andrew Jackson\'s informal "cabinet", which included Martin Van Buren', 'value': 1000, 'airdate': '2008-12-31T12:00:00.000Z', 'created_at': '2014-02-14T01:57:41.801Z', 'updated_at': '2014-02-14T01:57:41.801Z', 'category_id': 12204, 'game_id': None, 'invalid_count': None, 'category': {'id': 12204, 'title': '"it" is a 7-letter word', 'created_at': '2014-02-14T01:57:40.721Z', 'updated_at': '2014-02-14T01:57:40.721Z', 'clues_count': 5}}], 'behind the songs': [{'id': 110677, 'answer': '"Hey There Delilah"', 'question': "Tom Higgenson's flirtation with a girl in New York & a promise to write her a song led to this megahit for the Plain White T's", 'value': 200, 'airdate': '2012-04-16T12:00:00.000Z', 'created_at': '2014-02-14T02:40:53.156Z', 'updated_at': '2014-02-14T02:40:53.156Z', 'category_id': 15025, 'game_id': None, 'invalid_count': None, 'category': {'id': 15025, 'title': 'behind the songs', 'created_at': '2014-02-14T02:40:52.987Z', 'updated_at': '2014-02-14T02:40:52.987Z', 'clues_count': 10}}, {'id': 110683, 'answer': 'Chicago', 'question': "It was a Saturday in the park--Central Park--that inspired Robert Lamm to write this group's first gold single", 'value': 400, 'airdate': '2012-04-16T12:00:00.000Z', 'created_at': '2014-02-14T02:40:53.354Z', 'updated_at': '2014-02-14T02:40:53.354Z', 'category_id': 15025, 'game_id': None, 'invalid_count': None, 'category': {'id': 15025, 'title': 'behind the songs', 'created_at': '2014-02-14T02:40:52.987Z', 'updated_at': '2014-02-14T02:40:52.987Z', 'clues_count': 10}}, {'id': 110689, 'answer': 'Clint Black', 'question': 'This country singer wrote "When I Said I Do" for wife Lisa Hartman, who then recorded the song with him as a duet', 'value': 600, 'airdate': '2012-04-16T12:00:00.000Z', 'created_at': '2014-02-14T02:40:53.554Z', 'updated_at': '2014-02-14T02:40:53.554Z', 'category_id': 15025, 'game_id': None, 'invalid_count': None, 'category': {'id': 15025, 'title': 'behind the songs', 'created_at': '2014-02-14T02:40:52.987Z', 'updated_at': '2014-02-14T02:40:52.987Z', 'clues_count': 10}}, {'id': 110695, 'answer': '"(Don\\\'t Fear) The Reaper"', 'question': "Blue Oyster Cult's Buck Dharma wrote this song after pondering about dying young & whether loved ones are reunited", 'value': 800, 'airdate': '2012-04-16T12:00:00.000Z', 'created_at': '2014-02-14T02:40:53.755Z', 'updated_at': '2014-02-14T02:40:53.755Z', 'category_id': 15025, 'game_id': None, 'invalid_count': None, 'category': {'id': 15025, 'title': 'behind the songs', 'created_at': '2014-02-14T02:40:52.987Z', 'updated_at': '2014-02-14T02:40:52.987Z', 'clues_count': 10}}, {'id': 110701, 'answer': 'Chris Isaak', 'question': 'A girl who he knew was trouble called & said she was coming over; he wrote "Wicked Game" by the time she got there', 'value': 1000, 'airdate': '2012-04-16T12:00:00.000Z', 'created_at': '2014-02-14T02:40:54.029Z', 'updated_at': '2014-02-14T02:40:54.029Z', 'category_id': 15025, 'game_id': None, 'invalid_count': None, 'category': {'id': 15025, 'title': 'behind the songs', 'created_at': '2014-02-14T02:40:52.987Z', 'updated_at': '2014-02-14T02:40:52.987Z', 'clues_count': 10}}], 'hidden': [{'id': 57336, 'answer': 'camouflage', 'question': 'From the French for "to disguise", soldiers wear this to conceal themselves from the enemy', 'value': 200, 'airdate': '2002-09-30T12:00:00.000Z', 'created_at': '2014-02-11T23:21:40.162Z', 'updated_at': '2014-02-11T23:21:40.162Z', 'category_id': 7318, 'game_id': None, 'invalid_count': None, 'category': {'id': 7318, 'title': 'hidden', 'created_at': '2014-02-11T23:21:40.068Z', 'updated_at': '2014-02-11T23:21:40.068Z', 'clues_count': 5}}, {'id': 57342, 'answer': 'invisible ink', 'question': 'If your junior spy kit has run out of this, lemon juice can be substituted', 'value': 400, 'airdate': '2002-09-30T12:00:00.000Z', 'created_at': '2014-02-11T23:21:40.325Z', 'updated_at': '2014-02-11T23:21:40.325Z', 'category_id': 7318, 'game_id': None, 'invalid_count': None, 'category': {'id': 7318, 'title': 'hidden', 'created_at': '2014-02-11T23:21:40.068Z', 'updated_at': '2014-02-11T23:21:40.068Z', 'clues_count': 5}}, {'id': 57348, 'answer': 'Easter eggs', 'question': 'Hidden features on DVDs are known as these "holiday" items', 'value': 600, 'airdate': '2002-09-30T12:00:00.000Z', 'created_at': '2014-02-11T23:21:40.481Z', 'updated_at': '2014-02-11T23:21:40.481Z', 'category_id': 7318, 'game_id': None, 'invalid_count': None, 'category': {'id': 7318, 'title': 'hidden', 'created_at': '2014-02-11T23:21:40.068Z', 'updated_at': '2014-02-11T23:21:40.068Z', 'clues_count': 5}}, {'id': 57354, 'answer': 'subliminal advertisements', 'question': 'In 1962 a Louisiana company got a patent for a device that added these to motion pictures in theaters', 'value': 800, 'airdate': '2002-09-30T12:00:00.000Z', 'created_at': '2014-02-11T23:21:40.638Z', 'updated_at': '2014-02-11T23:21:40.638Z', 'category_id': 7318, 'game_id': None, 'invalid_count': None, 'category': {'id': 7318, 'title': 'hidden', 'created_at': '2014-02-11T23:21:40.068Z', 'updated_at': '2014-02-11T23:21:40.068Z', 'clues_count': 5}}, {'id': 57360, 'answer': 'agenda', 'question': 'Latin for "things to be done", you have to watch out for a person\'s hidden one', 'value': 1000, 'airdate': '2002-09-30T12:00:00.000Z', 'created_at': '2014-02-11T23:21:40.791Z', 'updated_at': '2014-02-11T23:21:40.791Z', 'category_id': 7318, 'game_id': None, 'invalid_count': None, 'category': {'id': 7318, 'title': 'hidden', 'created_at': '2014-02-11T23:21:40.068Z', 'updated_at': '2014-02-11T23:21:40.068Z', 'clues_count': 5}}]}
     new_board = {}
     for key in board:
-        new_board[key] = []
+        new_board[re.sub('[^A-Za-z]','',key)] = []
         for arr in board[key]:
-            new_board[key].append({'id':arr['id'], 'value':arr['value'], 'question':arr['question'], 'answered':False})
+            new_board[re.sub('[^A-Za-z]','',key)].append({'category':key, 'id':arr['id'], 'value':arr['value'], 'question':arr['question'], 'answer':arr['answer'], 'answered':False})
     cur.execute("INSERT INTO rooms(room_name, board, player1, started, complete) VALUES (%s,%s,%s, 0, 0)",(room_name,json.dumps(new_board),connected_users[access_token]['auth0_code']))
     cur.execute('SELECT room_id FROM rooms WHERE room_name = %s',(room_name,))
     room_id = int(cur.fetchone()[0])
-    room_list[room_id] = {
+    room_list[room_id] = copy.deepcopy(room_template)
+    room_list[room_id].update({
         'name':room_name,
         'room_id':room_id,
         'board':new_board,
         'started':False,
         'players':{
             'count':1,
+            'total_count':1,
             'one':{
                 'auth0_code':connected_users[access_token]['auth0_code'],
                 'score':0
@@ -259,7 +274,7 @@ def make_room():
             'three':{}
         },
         'viewers':[]
-    }
+    })
     conn.commit()
     return jsonify({"room_id":room_id})
 
@@ -273,8 +288,8 @@ def get_board():
     try:
         board = room_list[room_id]['board']
     except:
-        cur.execute("SELECT board, room_name, player1, player1value, player2, player2value, player3, player3value  FROM rooms WHERE room_id = %s",(room_id,))
-        board, room_name, player1, player1value, player2, player2value, player3, player3value = cur.fetchone()
+        cur.execute("SELECT board, room_name, player1, player1value, player2, player2value, player3, player3value, started FROM rooms WHERE room_id = %s",(room_id,))
+        board, room_name, player1, player1value, player2, player2value, player3, player3value, started = cur.fetchone()
         board = json.loads(board)
         players = {
             'one':{},
@@ -283,31 +298,39 @@ def get_board():
         }
         if player1 != None:
             players['count'] = players.get('count',0) + 1
+            players['total_count'] = players.get('total_count',0) + 1
             players['one']['auth0_code'] = player1
             players['one']['score'] = player1value
             if players['one']['auth0_code'] == connected_users[access_token]['auth0_code']:
                 connected_users['player_num'] = 'one'
         if player2 != None:
             players['count'] = players.get('count',0) + 1
+            players['total_count'] = players.get('total_count',0) + 1
             players['two']['auth0_code'] = player2
             players['two']['score'] = player2value
             if players['two']['auth0_code'] == connected_users[access_token]['auth0_code']:
                 connected_users['player_num'] = 'two'
         if player3 != None:
             players['count'] = players.get('count',0) + 1
+            players['total_count'] = players.get('total_count',0) + 1
             players['three']['auth0_code'] = player3
             players['three']['score'] = player3value
             if players['three']['auth0_code'] == connected_users[access_token]['auth0_code']:
                 connected_users['player_num'] = 'three'
-        room_list[room_id] = {
+        room_list[room_id] = copy.deepcopy(room_template)
+        room_list[room_id].update({
             'name':room_name,
             'room_id':room_id,
             'board':board,
-            'started':False,
+            'started':started,
             'players': players,
-            'viewers':[]
-        }
-    return jsonify({'board': board})
+        })
+    filtered_board = {}
+    for key in board:
+        filtered_board[key] = []
+        for arr in board[key]:
+            filtered_board[key].append({'category':arr['category'], 'id':arr['id'], 'value':arr['value'], 'answered':arr['answered']})
+    return jsonify({'board': filtered_board})
 
 
 req_ids = {}  
@@ -321,6 +344,32 @@ def ping_check():
         socketio.emit('ping_check', {'ping_num':ping_count}, namespace='/jep', room='players')
         ping_count = ping_count + 1
 
+def buzzIn(room_id):
+    socketio.sleep(2)
+    socketio.emit('buzzable', {'buzz':True}, namespace='/jep', room=str(room_id))
+
+def buzzBackground(args):
+    global room_list
+    room_id = args['room_id']
+    catclue = args['screen_clicked']
+    socketio.sleep(5)
+    print('buzzBackground')
+    if room_list[room_id]['buzzedIn'] == 0:
+        socketio.emit('no_buzz', {'active_player':room_list[room_id]['active_player'],'screen_clicked':catclue}, namespace='/jep', room=str(room_id))
+
+def buzz_in_background(room_id):
+    global room_list
+    socketio.sleep(2)
+    lowest_time = 99999999999999999
+    lowest_player = ''
+    for player in room_list[room_id]['buzzedPlayerTimes']:
+        if room_list[room_id]['buzzedPlayerTimes'][player] != '':
+            if room_list[room_id]['buzzedPlayerTimes'][player] < lowest_time:
+                lowest_time = room_list[room_id]['buzzedPlayerTimes'][player]
+                lowest_player = player
+    room_list[room_id]['buzzedIn'] = numbers.index(lowest_player)
+    socketio.emit('fastest_buzz', {'buzzedIn':room_list[room_id]['buzzedIn']}, namespace='/jep', room=str(room_id))
+
 class jeopardy_socket(Namespace):
 
     def on_pong_res(self, message):
@@ -328,8 +377,7 @@ class jeopardy_socket(Namespace):
         pos = req_ids[request.sid]['player_num']
         diff = datetime.datetime.now() - ping_list[message['ping_num']]
         ping = round((diff.microseconds / 10**6 + diff.seconds) * 1000)
-        room_list[req_ids[request.sid]['room_id']]['players'][pos]['ping'].append(ping) 
-        print(sum(room_list[req_ids[request.sid]['room_id']]['players'][pos]['ping']) // len(room_list[req_ids[request.sid]['room_id']]['players'][pos]['ping']))
+        room_list[req_ids[request.sid]['room_id']]['players'][pos].get('ping',[]).append(ping) 
 
     def on_connect(self):
         global thread
@@ -338,13 +386,17 @@ class jeopardy_socket(Namespace):
                 thread = socketio.start_background_task(ping_check)
 
     def on_disconnect(self):
-        # global room_list, connected_users
-        # for user in connected_users:
-        #     if connected_users[user]['sid'] == request.id:
-        #         room_list
-        # if room_list[message['room_id']]['count'] == 0 and len(room_list[message['room_id']]['viewers']) == 0:
-        #     del room_list[message['room_id']]
-        pass
+        global room_list, req_ids, connected_users
+        room_id = req_ids[request.sid]['room_id']
+        username = req_ids[request.sid]['username'][0]
+        print(req_ids[request.sid]['username'][0] + ' disconnected from room ' + str(room_id))
+        if req_ids[request.sid].get('player_num', 0) != 0:
+            room_list[room_id]['players']['count'] = room_list[room_id]['players']['count'] - 1
+        del room_list[room_id]['viewers'][room_list[room_id]['viewers'].index(username)]
+        if room_list[room_id]['players']['count'] == 0 and len(room_list[room_id]['viewers']) == 0:
+            del room_list[room_id]
+        del connected_users[req_ids[request.sid]['access_token']]
+        del req_ids[request.sid]
 
     def on_join_room(self,message):
         try:
@@ -356,7 +408,7 @@ class jeopardy_socket(Namespace):
 
             join_room(str(room_id))
 
-            room_list[room_id]['viewers'].append(req_ids[request.sid]['username'])
+            room_list[room_id]['viewers'].append(req_ids[request.sid]['username'][0])
             req_ids[request.sid]['sid'] = request.sid
             req_ids[request.sid]['room_id'] = room_id
 
@@ -372,7 +424,7 @@ class jeopardy_socket(Namespace):
             room_list[room_id]['players']['three'] = room_list[room_id]['players'].get('three',{})
             if room_list[room_id].get('init', None) == None:
                 for pos in room_list[room_id]['players']:
-                    if pos != 'count':
+                    if pos == 'one' or pos == 'two' or pos == 'three':
                         room_list[req_ids[request.sid]['room_id']]['players'][pos]['ping'] = []
                         cur.execute("SELECT username FROM players WHERE auth0_code = %s",(room_list[room_id]['players'][pos].get('auth0_code','0'),))
                         try:
@@ -389,10 +441,22 @@ class jeopardy_socket(Namespace):
                         del room['players'][pos]['auth0_code']
                         if room_list[room_id]['players'][pos]['auth0_code'] == req_ids[request.sid]['auth0_code']:
                             req_ids[request.sid]['player_num'] = pos
-                            room_list[room_id]['viewers'].remove(req_ids[request.sid]['username'])
+                            room_list[room_id]['viewers'].remove(req_ids[request.sid]['username'][0])
                             join_room('players')
-            emit('has_joined_room', {'room_list':room, 'position':req_ids[request.sid].get('player_num',0), 'player_id':req_ids[request.sid]['player_id']})
-        except:
+            emit('has_joined_room', { 
+                'players':{ 
+                    'one':room['players']['one'],
+                    'two':room['players']['two'],
+                    'three':room['players']['three'] 
+                }, 
+                'position':req_ids[request.sid].get('player_num',0), 
+                'player_id':req_ids[request.sid]['player_id'],
+                'started': room['started'],
+                'active_player':room['active_player']
+                }
+            )
+        except Exception as e:
+            print(e)
             emit('error')
             
 
@@ -410,7 +474,7 @@ class jeopardy_socket(Namespace):
         
         if req_ids[request.sid].get('player_num',None) == None:
             if room_list[room_id]['players'][position]['username'] == "" and room_list[room_id].get('started', False) == False:
-                room_list[room_id]['viewers'].remove(req_ids[request.sid]['username'])
+                room_list[room_id]['viewers'].remove(req_ids[request.sid]['username'][0])
                 join_room('players')
                 room_list[room_id]['players'][position]['auth0_code'] = auth0_code
                 cur.execute("SELECT username FROM players WHERE auth0_code = %s",(room_list[room_id]['players'][position].get('auth0_code','0'),))
@@ -418,10 +482,11 @@ class jeopardy_socket(Namespace):
                 room_list[room_id]['players'][position]['username'] = cur.fetchone()[0]
                 req_ids[request.sid]['player_num'] = position
                 room_list[room_id]['players']['count'] = room_list[room_id]['players'].get('count',0) + 1
+                room_list[room_id]['players']['total_count'] = room_list[room_id]['players'].get('total_count',0) + 1
                 emit('player_selected',{'username':req_ids[request.sid]['username'],'position':position, 'player_id':req_ids[request.sid]['player_id']}, room=str(room_id))
 
     def on_player_ready(self, message):
-        global room_list, connected_users, req_ids
+        global room_list, req_ids
         room_id = req_ids[request.sid]['room_id']
         pos = req_ids[request.sid]['player_num']
         if room_list[room_id]['players'][pos].get('ready',False) == False:
@@ -431,11 +496,75 @@ class jeopardy_socket(Namespace):
             room_list[room_id]['players'][pos]['ready'] = False
             room_list[room_id]['players']['ready_count'] = room_list[room_id]['players']['ready_count'] - 1
         if room_list[room_id]['players'].get('ready_count', 0) == room_list[room_id]['players']['count']:
-            room_list[room_id]['started'] = True
+            room_list[room_id]['started'] = 1
             room_list[room_id]['active_player'] = 1
-            emit('ready_player', { 'position':pos,'ready':room_list[room_id]['players'][pos]['ready'], 'started': True, 'active_player': room_list[room_id]['active_player']}, room=str(room_id))
+            emit('ready_player', { 'position':pos,'ready':room_list[room_id]['players'][pos]['ready'], 'started': room_list[room_id]['started'], 'active_player': room_list[room_id]['active_player']}, room=str(room_id))
         else:
-            emit('ready_player', { 'position':pos,'ready':room_list[room_id]['players'][pos]['ready'], 'started': False}, room=str(room_id))
+            emit('ready_player', { 'position':pos,'ready':room_list[room_id]['players'][pos]['ready'], 'started': room_list[room_id]['started']}, room=str(room_id))
+
+    def on_screen_select(self, message):
+        global room_list, req_ids
+        room_id = req_ids[request.sid]['room_id']
+        if numbers.index(req_ids[request.sid]['player_num']) == room_list[room_id]['active_player']:
+            category, clue = message['screen_clicked'].split('|')
+            clue = int(clue)
+            if room_list[room_id]['board'][re.sub('[^A-Za-z]','',category)][clue]['answered'] == False:
+                room_list[room_id]['board'][re.sub('[^A-Za-z]','',category)][clue]['answered'] = True
+                room_list[room_id]['selected_board'] = message['screen_clicked']
+                emit('screen_selected', { 'category':category, 'clue':clue, 'screen_text': room_list[room_id]['board'][category][clue]['question'], 'active_player':0 }, room=str(room_id))
+                with thread_lock_back:
+                    socketio.start_background_task(buzzIn,room_id)
+                    room_list[room_id]['buzzed_in_back'] = None
+                    room_list[room_id]['selected_time'] = datetime.datetime.now()
+                    room_list[room_id]['buzz_background'] = socketio.start_background_task(buzzBackground,{'room_id':room_id, 'screen_clicked':message['screen_clicked']})
+
+    def on_buzz_in(self):
+        global room_list, req_ids
+        room_id = req_ids[request.sid]['room_id']
+        pos = req_ids[request.sid]['player_num']
+
+        room_list[room_id]['buzzedIn'] = pos
+        now = room_list[room_id]['selected_time']
+        diff = (datetime.datetime.now() - now)
+        diff = round((diff.microseconds / 10**6 + diff.seconds) * 1000)
+        try:
+            room_list[room_id]['buzzedPlayerTimes'][pos] = diff - (sum(room_list[room_id]['players'][pos].get('ping',[])) / len(room_list[room_id]['players'][pos].get('ping',[])))
+        except:
+            room_list[room_id]['buzzedPlayerTimes'][pos] = diff
+
+        with thread_lock_buzz:
+            if room_list[room_id]['buzzed_in_back'] == None:
+                room_list[room_id]['buzzed_in_back'] = socketio.start_background_task(buzz_in_background,room_id)
+
+    def on_answer_typed(self, message):
+        global room_list, req_ids, numbers
+        room_id = req_ids[request.sid]['room_id']
+        if numbers.index(req_ids[request.sid]['player_num']) == room_list[room_id]['buzzedIn']:
+            print(message['answer'])
+            emit('typed_answer', {'answer_input':message['answer']}, room=str(room_id))
+
+    def on_answer_submit(self, message):
+        global room_list, req_ids
+        room_id = req_ids[request.sid]['room_id']
+        answer = message['answer']
+        pos = req_ids[request.sid]['player_num']
+        category, clue = room_list[room_id]['selected_board'].split('|')
+        clue = int(clue)
+        real_answer = room_list[room_id]['board'][category][clue]['answer']
+        print(real_answer)
+        match = re.search(re.sub('[^A-Za-z\s]','',answer),re.sub('[^A-Za-z\s]','',real_answer))
+        print(match)
+        if match != None:
+            match = match.group()
+            print(len(re.sub('[^A-Za-z\s]','',match)) / len(re.sub('[^A-Za-z\s]','',real_answer)) * 100)
+            if len(re.sub('[^A-Za-z\s]','',match)) / len(re.sub('[^A-Za-z\s]','',real_answer)) * 100 > 80:
+                room_list[room_id]['players'][pos]['score'] = room_list[room_id]['players'][pos]['score'] + room_list[room_id]['board'][category][clue]['value']
+                emit('answer_response', { 'correct':True, 'position': pos, 'new_score': room_list[room_id]['players'][pos]['score'] }, room=str(room_id))
+        else:
+            room_list[room_id]['players'][pos]['score'] = room_list[room_id]['players'][pos]['score'] + room_list[room_id]['board'][category][clue]['value']
+            emit('answer_response', { 'correct':False, 'position': pos, 'new_score': room_list[room_id]['players'][pos]['score'] }, room=str(room_id))
+
+
 
 
     def on_test(self, message):
