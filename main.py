@@ -5,6 +5,7 @@ from threading import Lock
 from jose import jwt
 from six.moves.urllib.request import urlopen
 from functools import wraps
+from fuzzywuzzy import fuzz
 import json, psycopg2, os, hashlib, requests, random, datetime, copy, re
 
 conn = psycopg2.connect(dbname=os.environ['DBNAME'], user=os.environ['USER'], password=os.environ['PASSWORD'], host=os.environ['HOST'])
@@ -219,6 +220,7 @@ def set_username():
         cur.execute("INSERT INTO players(username, auth0_code) VALUES (%s, %s)", (username, connected_users[access_token]['auth0_code']))
     else:
         cur.execute("UPDATE players SET username = %s WHERE auth0_code = %s", (username, connected_users[access_token]['auth0_code']))
+    connected_users[access_token]['username'] = (username,) # toupled because it's how it's sent from SQL and I didn't notice until too far in
     conn.commit()
     return jsonify({'response': True, 'username': username})
 
@@ -230,11 +232,11 @@ def get_room_list():
     access_token = get_token_auth_header()
     rooms = []
     for room in room_list:
-        rooms.append({'name':room_list[room]['name'], 'id':room_list[room]['room_id'], 'players':'started' if room_list[room]['started'] else room_list[room]['players']['total_count']})
+        rooms.append({'name':room_list[room]['name'], 'id':room_list[room]['room_id'], 'players':'started' if room_list[room]['started'] else room_list[room]['players']['total_count'], 'old':False })
     cur.execute("SELECT room_name, room_id, player1, player2, player3, started FROM rooms WHERE player1 = %s AND complete = 0",(connected_users[access_token]['auth0_code'],))
     for room in cur.fetchall():
         if room[1] not in list(room_list.keys()):
-            rooms.append({'name':room[0], 'id':room[1], 'players':'started' if room[5] == 1 else len([p for p in room[2:4] if p != None])})
+            rooms.append({'name':room[0], 'id':room[1], 'players':'started' if room[5] == 1 else len([p for p in room[2:4] if p != None]), 'old':True })
     return jsonify(rooms)
 
 @app.route('/api/roomlist/create', methods=['POST'])
@@ -244,26 +246,28 @@ def make_room():
     global room_list, connected_users, room_template
     room_name = request.get_json()['roomName']
     access_token = get_token_auth_header()
-    # values = [200, 400, 600, 800, 1000]
-    # board = {}
-    # while len(board) < 5:
-    #     category = requests.get(f'http://jservice.io/api/categories?count=1&offset={random.randint(1,18400)}').json()[0]
-    #     holderList = []
-    #     for value in values:
-    #         r = requests.get(f'http://jservice.io/api/clues?category={category["id"]}&value={value}').json()
-    #         try:
-    #             holderList.append(r[0])
-    #         except:
-    #             break
-    #     if len(holderList) == 5:
-    #         board[category['title']] = holderList
-    #     print(board.keys())
-    # new_board = {}
-    # for key in board:
-    #     new_board[re.sub(r'[^A-Za-z]','',key)] = []
-    #     for arr in board[key]:
-    #         new_board[re.sub(r'[^A-Za-z]','',key)].append({'category':key, 'id':arr['id'], 'value':arr['value'], 'question':arr['question'], 'answer':arr['answer'], 'answered':False})
-    new_board = {'hairyit': [{'category': 'hairy it', 'id': 82119, 'value': 200, 'question': 'Seen here, this mammal is all mouth & no teeth', 'answer': '<i>an anteater</i>', 'answered': False}, {'category': 'hairy it', 'id': 82125, 'value': 400, 'question': "This small mammal, Mephitis mephitis, can spray musk accurately as far as 12 feet (& it ain't the Jovan kind)", 'answer': 'a skunk', 'answered': False}, {'category': 'hairy it', 'id': 82131, 'value': 600, 'question': 'You think you can experiment with a clue like it was some kind of this rodent, seen here?', 'answer': 'a guinea pig', 'answered': False}, {'category': 'hairy it', 'id': 82137, 'value': 800, 'question': 'There are 3 kinds of this animal: western lowland, eastern lowland & mountain', 'answer': 'a gorilla', 'answered': False}, {'category': 'hairy it', 'id': 82143, 'value': 1000, 'question': 'This species seen here is found only in North America', 'answer': 'a bighorn sheep', 'answered': False}], 'mixingapplesoranges': [{'category': 'mixing apples & oranges', 'id': 107828, 'value': 200, 'question': 'An apple & a crossbow play important roles in this 1804 Schiller tale', 'answer': 'William Tell', 'answered': False}, {'category': 'mixing apples & oranges', 'id': 107834, 'value': 400, 'question': 'This 2-word Vietnam War item consisted of 2 weedkillers--2,4-D & 2,4,5-T', 'answer': 'Agent Orange', 'answered': False}, {'category': 'mixing apples & oranges', 'id': 107840, 'value': 600, 'question': 'The European type of this holiday plant seen here grows most often on apple trees', 'answer': 'mistletoe', 'answered': False}, {'category': 'mixing apples & oranges', 'id': 107846, 'value': 800, 'question': 'Have a devil of a time in this smallest state in Australia, often called the Apple Isle', 'answer': 'Tasmania', 'answered': False}, {'category': 'mixing apples & oranges', 'id': 107852, 'value': 1000, 'question': 'This Florida sports & concert venue was demolished in 2008', 'answer': 'the Orange Bowl Stadium', 'answered': False}], 'itisaletterword': [{'category': '"it" is a 7-letter word', 'id': 92049, 'value': 200, 'question': 'Proverbially, this "is the soul of wit"', 'answer': 'brevity', 'answered': False}, {'category': '"it" is a 7-letter word', 'id': 92055, 'value': 400, 'question': 'A native or naturalized member of a state or nation', 'answer': 'a citizen', 'answered': False}, {'category': '"it" is a 7-letter word', 'id': 92061, 'value': 600, 'question': "A marauding linebacker, or CNN's Wolf", 'answer': 'a blitzer', 'answered': False}, {'category': '"it" is a 7-letter word', 'id': 92067, 'value': 800, 'question': 'A notable one of these read, "Here lies Ann Mann, who lived an old maid but died an old Mann"', 'answer': 'an epitaph', 'answered': False}, {'category': '"it" is a 7-letter word', 'id': 92073, 'value': 1000, 'question': 'Nickname of Andrew Jackson\'s informal "cabinet", which included Martin Van Buren', 'answer': 'the Kitchen Cabinet', 'answered': False}], 'behindthesongs': [{'category': 'behind the songs', 'id': 110677, 'value': 200, 'question': "Tom Higgenson's flirtation with a girl in New York & a promise to write her a song led to this megahit for the Plain White T's", 'answer': '"Hey There Delilah"', 'answered': False}, {'category': 'behind the songs', 'id': 110683, 'value': 400, 'question': "It was a Saturday in the park--Central Park--that inspired Robert Lamm to write this group's first gold single", 'answer': 'Chicago', 'answered': False}, {'category': 'behind the songs', 'id': 110689, 'value': 600, 'question': 'This country singer wrote "When I Said I Do" for wife Lisa Hartman, who then recorded the song with him as a duet', 'answer': 'Clint Black', 'answered': False}, {'category': 'behind the songs', 'id': 110695, 'value': 800, 'question': "Blue Oyster Cult's Buck Dharma wrote this song after pondering about dying young & whether loved ones are reunited", 'answer': '"(Don\\\'t Fear) The Reaper"', 'answered': False}, {'category': 'behind the songs', 'id': 110701, 'value': 1000, 'question': 'A girl who he knew was trouble called & said she was coming over; he wrote "Wicked Game" by the time she got there', 'answer': 'Chris Isaak', 'answered': False}], 'hidden': [{'category': 'hidden', 'id': 57336, 'value': 200, 'question': 'From the French for "to disguise", soldiers wear this to conceal themselves from the enemy', 'answer': 'camouflage', 'answered': False}, {'category': 'hidden', 'id': 57342, 'value': 400, 'question': 'If your junior spy kit has run out of this, lemon juice can be substituted', 'answer': 'invisible ink', 'answered': False}, {'category': 'hidden', 'id': 57348, 'value': 600, 'question': 'Hidden features on DVDs are known as these "holiday" items', 'answer': 'Easter eggs', 'answered': False}, {'category': 'hidden', 'id': 57354, 'value': 800, 'question': 'In 1962 a Louisiana company got a patent for a device that added these to motion pictures in theaters', 'answer': 'subliminal advertisements', 'answered': False}, {'category': 'hidden', 'id': 57360, 'value': 1000, 'question': 'Latin for "things to be done", you have to watch out for a person\'s hidden one', 'answer': 'agenda', 'answered': False}]}
+    values = [200, 400, 600, 800, 1000]
+    board = {}
+    while len(board) < 5:
+        category = requests.get(f'http://jservice.io/api/categories?count=1&offset={random.randint(1,18400)}').json()[0]
+        holderList = []
+        for value in values:
+            r = requests.get(f'http://jservice.io/api/clues?category={category["id"]}&value={value}').json()
+            try:
+                holderList.append(r[0])
+            except:
+                break
+        if len(holderList) == 5:
+            board[category['title']] = holderList
+        print(board.keys())
+    new_board = {}
+    for key in board:
+        new_board[re.sub(r'[^A-Za-z]','',key)] = []
+        for arr in board[key]:
+            new_board[re.sub(r'[^A-Za-z]','',key)].append({'category':key, 'id':arr['id'], 'value':arr['value'], 'question':arr['question'], 'answer':arr['answer'], 'answered':False})
+    
+    # new_board = {'hairyit': [{'category': 'hairy it', 'id': 82119, 'value': 200, 'question': 'Seen here, this mammal is all mouth & no teeth', 'answer': '<i>an anteater</i>', 'answered': False}, {'category': 'hairy it', 'id': 82125, 'value': 400, 'question': "This small mammal, Mephitis mephitis, can spray musk accurately as far as 12 feet (& it ain't the Jovan kind)", 'answer': 'a skunk', 'answered': False}, {'category': 'hairy it', 'id': 82131, 'value': 600, 'question': 'You think you can experiment with a clue like it was some kind of this rodent, seen here?', 'answer': 'a guinea pig', 'answered': False}, {'category': 'hairy it', 'id': 82137, 'value': 800, 'question': 'There are 3 kinds of this animal: western lowland, eastern lowland & mountain', 'answer': 'a gorilla', 'answered': False}, {'category': 'hairy it', 'id': 82143, 'value': 1000, 'question': 'This species seen here is found only in North America', 'answer': 'a bighorn sheep', 'answered': False}], 'mixingapplesoranges': [{'category': 'mixing apples & oranges', 'id': 107828, 'value': 200, 'question': 'An apple & a crossbow play important roles in this 1804 Schiller tale', 'answer': 'William Tell', 'answered': False}, {'category': 'mixing apples & oranges', 'id': 107834, 'value': 400, 'question': 'This 2-word Vietnam War item consisted of 2 weedkillers--2,4-D & 2,4,5-T', 'answer': 'Agent Orange', 'answered': False}, {'category': 'mixing apples & oranges', 'id': 107840, 'value': 600, 'question': 'The European type of this holiday plant seen here grows most often on apple trees', 'answer': 'mistletoe', 'answered': False}, {'category': 'mixing apples & oranges', 'id': 107846, 'value': 800, 'question': 'Have a devil of a time in this smallest state in Australia, often called the Apple Isle', 'answer': 'Tasmania', 'answered': False}, {'category': 'mixing apples & oranges', 'id': 107852, 'value': 1000, 'question': 'This Florida sports & concert venue was demolished in 2008', 'answer': 'the Orange Bowl Stadium', 'answered': False}], 'itisaletterword': [{'category': '"it" is a 7-letter word', 'id': 92049, 'value': 200, 'question': 'Proverbially, this "is the soul of wit"', 'answer': 'brevity', 'answered': False}, {'category': '"it" is a 7-letter word', 'id': 92055, 'value': 400, 'question': 'A native or naturalized member of a state or nation', 'answer': 'a citizen', 'answered': False}, {'category': '"it" is a 7-letter word', 'id': 92061, 'value': 600, 'question': "A marauding linebacker, or CNN's Wolf", 'answer': 'a blitzer', 'answered': False}, {'category': '"it" is a 7-letter word', 'id': 92067, 'value': 800, 'question': 'A notable one of these read, "Here lies Ann Mann, who lived an old maid but died an old Mann"', 'answer': 'an epitaph', 'answered': False}, {'category': '"it" is a 7-letter word', 'id': 92073, 'value': 1000, 'question': 'Nickname of Andrew Jackson\'s informal "cabinet", which included Martin Van Buren', 'answer': 'the Kitchen Cabinet', 'answered': False}], 'behindthesongs': [{'category': 'behind the songs', 'id': 110677, 'value': 200, 'question': "Tom Higgenson's flirtation with a girl in New York & a promise to write her a song led to this megahit for the Plain White T's", 'answer': '"Hey There Delilah"', 'answered': False}, {'category': 'behind the songs', 'id': 110683, 'value': 400, 'question': "It was a Saturday in the park--Central Park--that inspired Robert Lamm to write this group's first gold single", 'answer': 'Chicago', 'answered': False}, {'category': 'behind the songs', 'id': 110689, 'value': 600, 'question': 'This country singer wrote "When I Said I Do" for wife Lisa Hartman, who then recorded the song with him as a duet', 'answer': 'Clint Black', 'answered': False}, {'category': 'behind the songs', 'id': 110695, 'value': 800, 'question': "Blue Oyster Cult's Buck Dharma wrote this song after pondering about dying young & whether loved ones are reunited", 'answer': '"(Don\\\'t Fear) The Reaper"', 'answered': False}, {'category': 'behind the songs', 'id': 110701, 'value': 1000, 'question': 'A girl who he knew was trouble called & said she was coming over; he wrote "Wicked Game" by the time she got there', 'answer': 'Chris Isaak', 'answered': False}], 'hidden': [{'category': 'hidden', 'id': 57336, 'value': 200, 'question': 'From the French for "to disguise", soldiers wear this to conceal themselves from the enemy', 'answer': 'camouflage', 'answered': False}, {'category': 'hidden', 'id': 57342, 'value': 400, 'question': 'If your junior spy kit has run out of this, lemon juice can be substituted', 'answer': 'invisible ink', 'answered': False}, {'category': 'hidden', 'id': 57348, 'value': 600, 'question': 'Hidden features on DVDs are known as these "holiday" items', 'answer': 'Easter eggs', 'answered': False}, {'category': 'hidden', 'id': 57354, 'value': 800, 'question': 'In 1962 a Louisiana company got a patent for a device that added these to motion pictures in theaters', 'answer': 'subliminal advertisements', 'answered': False}, {'category': 'hidden', 'id': 57360, 'value': 1000, 'question': 'Latin for "things to be done", you have to watch out for a person\'s hidden one', 'answer': 'agenda', 'answered': False}]}
+    
     cur.execute("INSERT INTO rooms(room_name, board, player1, started, complete) VALUES (%s,%s,%s, 0, 0)",(room_name,json.dumps(new_board),connected_users[access_token]['auth0_code']))
     cur.execute('SELECT room_id FROM rooms WHERE room_name = %s',(room_name,))
     room_id = int(cur.fetchone()[0])
@@ -587,14 +591,26 @@ class jeopardy_socket(Namespace):
             category, clue = room_list[room_id]['selected_board'].split('|')
             clue = int(clue)
             real_answer = re.sub(r'<.+?>','',room_list[room_id]['board'][category][clue]['answer'])
-            print(real_answer)
-            match = re.search(re.sub(r'[^A-Za-z\s]','',answer.lower()),re.sub(r'[^A-Za-z\s]','',real_answer.lower()))
-            if match != None:
-                match = match.group()
-            else:
-                match = ''
-            print(len(re.sub(r'[^A-Za-z\s]','',match)) / len(re.sub(r'[^A-Za-z\s]','',real_answer)) * 100)
-            if len(re.sub(r'[^A-Za-z\s]','',match)) / len(re.sub(r'[^A-Za-z\s]','',real_answer)) * 100 > 60:
+            # match = re.search(re.sub(r'[^A-Za-z\s]','',answer.lower()),re.sub(r'[^A-Za-z\s]','',real_answer.lower()))
+            # if match != None:
+            #     match = match.group()
+            # else:
+            #     match = ''
+
+            ratio = fuzz.ratio(re.sub(r'[^A-Za-z\s]','',answer.lower()), re.sub(r'[^A-Za-z\s]','',real_answer.lower()))
+            token_sort = fuzz.token_sort_ratio(re.sub(r'[^A-Za-z\s]','',answer.lower()), re.sub(r'[^A-Za-z\s]','',real_answer.lower()))
+            token_set = fuzz.token_set_ratio(re.sub(r'[^A-Za-z\s]','',answer.lower()), re.sub(r'[^A-Za-z\s]','',real_answer.lower()))
+
+            print_answer = re.sub(r'[^A-Za-z\s]','',answer.lower())
+            pint_real_answer = re.sub(r'[^A-Za-z\s]','',real_answer.lower())
+            
+            # print(fuzz.ratio(re.sub(r'[^A-Za-z\s]','',match), re.sub(r'[^A-Za-z\s]','',real_answer)))
+            # print(fuzz.partial_ratio(re.sub(r'[^A-Za-z\s]','',match), re.sub(r'[^A-Za-z\s]','',real_answer)))
+            # print(fuzz.token_sort_ratio(re.sub(r'[^A-Za-z\s]','',match), re.sub(r'[^A-Za-z\s]','',real_answer)))
+            # print(fuzz.token_set_ratio(re.sub(r'[^A-Za-z\s]','',match), re.sub(r'[^A-Za-z\s]','',real_answer)))
+            print(f"{print_answer} | {pint_real_answer} | ratio: {ratio}%, sort: {token_sort}%, set: {token_set}% = {(ratio + token_sort + token_set) // 3}")
+            # print(len(re.sub(r'[^A-Za-z\s]','',match)) / len(re.sub(r'[^A-Za-z\s]','',real_answer)) * 100)
+            if (ratio + token_sort + token_set) // 3 > 50 and (ratio == 100 or token_sort == 100 or token_set == 100) :
                 print('correct')
                 room_list[room_id]['players'][pos]['score'] = room_list[room_id]['players'][pos]['score'] + room_list[room_id]['board'][category][clue]['value']
                 room_list[room_id]['active_player'] = numbers.index(pos)
