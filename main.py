@@ -39,6 +39,7 @@ room_template = {
     'room_id':0,
     'board': {},
     'selected_board':'',
+    'answer_count':0,
     'active_player':0,
     'started':0,
     'selected_time':None,
@@ -246,6 +247,7 @@ def make_room():
     global room_list, connected_users, room_template
     room_name = request.get_json()['roomName']
     access_token = get_token_auth_header()
+    
     values = [200, 400, 600, 800, 1000]
     board = {}
     while len(board) < 5:
@@ -266,7 +268,7 @@ def make_room():
         for arr in board[key]:
             new_board[re.sub(r'[^A-Za-z]','',key)].append({'category':key, 'id':arr['id'], 'value':arr['value'], 'question':arr['question'], 'answer':arr['answer'], 'answered':False})
     
-    # new_board = {'hairyit': [{'category': 'hairy it', 'id': 82119, 'value': 200, 'question': 'Seen here, this mammal is all mouth & no teeth', 'answer': '<i>an anteater</i>', 'answered': False}, {'category': 'hairy it', 'id': 82125, 'value': 400, 'question': "This small mammal, Mephitis mephitis, can spray musk accurately as far as 12 feet (& it ain't the Jovan kind)", 'answer': 'a skunk', 'answered': False}, {'category': 'hairy it', 'id': 82131, 'value': 600, 'question': 'You think you can experiment with a clue like it was some kind of this rodent, seen here?', 'answer': 'a guinea pig', 'answered': False}, {'category': 'hairy it', 'id': 82137, 'value': 800, 'question': 'There are 3 kinds of this animal: western lowland, eastern lowland & mountain', 'answer': 'a gorilla', 'answered': False}, {'category': 'hairy it', 'id': 82143, 'value': 1000, 'question': 'This species seen here is found only in North America', 'answer': 'a bighorn sheep', 'answered': False}], 'mixingapplesoranges': [{'category': 'mixing apples & oranges', 'id': 107828, 'value': 200, 'question': 'An apple & a crossbow play important roles in this 1804 Schiller tale', 'answer': 'William Tell', 'answered': False}, {'category': 'mixing apples & oranges', 'id': 107834, 'value': 400, 'question': 'This 2-word Vietnam War item consisted of 2 weedkillers--2,4-D & 2,4,5-T', 'answer': 'Agent Orange', 'answered': False}, {'category': 'mixing apples & oranges', 'id': 107840, 'value': 600, 'question': 'The European type of this holiday plant seen here grows most often on apple trees', 'answer': 'mistletoe', 'answered': False}, {'category': 'mixing apples & oranges', 'id': 107846, 'value': 800, 'question': 'Have a devil of a time in this smallest state in Australia, often called the Apple Isle', 'answer': 'Tasmania', 'answered': False}, {'category': 'mixing apples & oranges', 'id': 107852, 'value': 1000, 'question': 'This Florida sports & concert venue was demolished in 2008', 'answer': 'the Orange Bowl Stadium', 'answered': False}], 'itisaletterword': [{'category': '"it" is a 7-letter word', 'id': 92049, 'value': 200, 'question': 'Proverbially, this "is the soul of wit"', 'answer': 'brevity', 'answered': False}, {'category': '"it" is a 7-letter word', 'id': 92055, 'value': 400, 'question': 'A native or naturalized member of a state or nation', 'answer': 'a citizen', 'answered': False}, {'category': '"it" is a 7-letter word', 'id': 92061, 'value': 600, 'question': "A marauding linebacker, or CNN's Wolf", 'answer': 'a blitzer', 'answered': False}, {'category': '"it" is a 7-letter word', 'id': 92067, 'value': 800, 'question': 'A notable one of these read, "Here lies Ann Mann, who lived an old maid but died an old Mann"', 'answer': 'an epitaph', 'answered': False}, {'category': '"it" is a 7-letter word', 'id': 92073, 'value': 1000, 'question': 'Nickname of Andrew Jackson\'s informal "cabinet", which included Martin Van Buren', 'answer': 'the Kitchen Cabinet', 'answered': False}], 'behindthesongs': [{'category': 'behind the songs', 'id': 110677, 'value': 200, 'question': "Tom Higgenson's flirtation with a girl in New York & a promise to write her a song led to this megahit for the Plain White T's", 'answer': '"Hey There Delilah"', 'answered': False}, {'category': 'behind the songs', 'id': 110683, 'value': 400, 'question': "It was a Saturday in the park--Central Park--that inspired Robert Lamm to write this group's first gold single", 'answer': 'Chicago', 'answered': False}, {'category': 'behind the songs', 'id': 110689, 'value': 600, 'question': 'This country singer wrote "When I Said I Do" for wife Lisa Hartman, who then recorded the song with him as a duet', 'answer': 'Clint Black', 'answered': False}, {'category': 'behind the songs', 'id': 110695, 'value': 800, 'question': "Blue Oyster Cult's Buck Dharma wrote this song after pondering about dying young & whether loved ones are reunited", 'answer': '"(Don\\\'t Fear) The Reaper"', 'answered': False}, {'category': 'behind the songs', 'id': 110701, 'value': 1000, 'question': 'A girl who he knew was trouble called & said she was coming over; he wrote "Wicked Game" by the time she got there', 'answer': 'Chris Isaak', 'answered': False}], 'hidden': [{'category': 'hidden', 'id': 57336, 'value': 200, 'question': 'From the French for "to disguise", soldiers wear this to conceal themselves from the enemy', 'answer': 'camouflage', 'answered': False}, {'category': 'hidden', 'id': 57342, 'value': 400, 'question': 'If your junior spy kit has run out of this, lemon juice can be substituted', 'answer': 'invisible ink', 'answered': False}, {'category': 'hidden', 'id': 57348, 'value': 600, 'question': 'Hidden features on DVDs are known as these "holiday" items', 'answer': 'Easter eggs', 'answered': False}, {'category': 'hidden', 'id': 57354, 'value': 800, 'question': 'In 1962 a Louisiana company got a patent for a device that added these to motion pictures in theaters', 'answer': 'subliminal advertisements', 'answered': False}, {'category': 'hidden', 'id': 57360, 'value': 1000, 'question': 'Latin for "things to be done", you have to watch out for a person\'s hidden one', 'answer': 'agenda', 'answered': False}]}
+    # new_board = {'hairyit': [{'category': 'test column', 'id': 82119, 'value': 200, 'question': 'Italics test', 'answer': '<i>an anteater</i>', 'answered': False}, {'category': 'hairy it', 'id': 82125, 'value': 400, 'question': "woman / women", 'answer': 'a women', 'answered': False}, {'category': 'hairy it', 'id': 82131, 'value': 600, 'question': 'data / datum', 'answer': 'the datum', 'answered': False}, {'category': 'hairy it', 'id': 82137, 'value': 800, 'question': 'Millennia / mellennium', 'answer': 'a millennium', 'answered': False}, {'category': 'hairy it', 'id': 82143, 'value': 1000, 'question': 'Opera / opus', 'answer': 'an opus', 'answered': False}], 'mixingapplesoranges': [{'category': 'mixing apples & oranges', 'id': 107828, 'value': 200, 'question': 'An apple & a crossbow play important roles in this 1804 Schiller tale', 'answer': 'William Tell', 'answered': False}, {'category': 'mixing apples & oranges', 'id': 107834, 'value': 400, 'question': 'This 2-word Vietnam War item consisted of 2 weedkillers--2,4-D & 2,4,5-T', 'answer': 'Agent Orange', 'answered': False}, {'category': 'mixing apples & oranges', 'id': 107840, 'value': 600, 'question': 'The European type of this holiday plant seen here grows most often on apple trees', 'answer': 'mistletoe', 'answered': False}, {'category': 'mixing apples & oranges', 'id': 107846, 'value': 800, 'question': 'Have a devil of a time in this smallest state in Australia, often called the Apple Isle', 'answer': 'Tasmania', 'answered': False}, {'category': 'mixing apples & oranges', 'id': 107852, 'value': 1000, 'question': 'This Florida sports & concert venue was demolished in 2008', 'answer': 'the Orange Bowl Stadium', 'answered': False}], 'itisaletterword': [{'category': '"it" is a 7-letter word', 'id': 92049, 'value': 200, 'question': 'Proverbially, this "is the soul of wit"', 'answer': 'brevity', 'answered': False}, {'category': '"it" is a 7-letter word', 'id': 92055, 'value': 400, 'question': 'A native or naturalized member of a state or nation', 'answer': 'a citizen', 'answered': False}, {'category': '"it" is a 7-letter word', 'id': 92061, 'value': 600, 'question': "A marauding linebacker, or CNN's Wolf", 'answer': 'a blitzer', 'answered': False}, {'category': '"it" is a 7-letter word', 'id': 92067, 'value': 800, 'question': 'A notable one of these read, "Here lies Ann Mann, who lived an old maid but died an old Mann"', 'answer': 'an epitaph', 'answered': False}, {'category': '"it" is a 7-letter word', 'id': 92073, 'value': 1000, 'question': 'Nickname of Andrew Jackson\'s informal "cabinet", which included Martin Van Buren', 'answer': 'the Kitchen Cabinet', 'answered': False}], 'behindthesongs': [{'category': 'behind the songs', 'id': 110677, 'value': 200, 'question': "Tom Higgenson's flirtation with a girl in New York & a promise to write her a song led to this megahit for the Plain White T's", 'answer': '"Hey There Delilah"', 'answered': False}, {'category': 'behind the songs', 'id': 110683, 'value': 400, 'question': "It was a Saturday in the park--Central Park--that inspired Robert Lamm to write this group's first gold single", 'answer': 'Chicago', 'answered': False}, {'category': 'behind the songs', 'id': 110689, 'value': 600, 'question': 'This country singer wrote "When I Said I Do" for wife Lisa Hartman, who then recorded the song with him as a duet', 'answer': 'Clint Black', 'answered': False}, {'category': 'behind the songs', 'id': 110695, 'value': 800, 'question': "Blue Oyster Cult's Buck Dharma wrote this song after pondering about dying young & whether loved ones are reunited", 'answer': '"(Don\\\'t Fear) The Reaper"', 'answered': False}, {'category': 'behind the songs', 'id': 110701, 'value': 1000, 'question': 'A girl who he knew was trouble called & said she was coming over; he wrote "Wicked Game" by the time she got there', 'answer': 'Chris Isaak', 'answered': False}], 'hidden': [{'category': 'hidden', 'id': 57336, 'value': 200, 'question': 'From the French for "to disguise", soldiers wear this to conceal themselves from the enemy', 'answer': 'camouflage', 'answered': False}, {'category': 'hidden', 'id': 57342, 'value': 400, 'question': 'If your junior spy kit has run out of this, lemon juice can be substituted', 'answer': 'invisible ink', 'answered': False}, {'category': 'hidden', 'id': 57348, 'value': 600, 'question': 'Hidden features on DVDs are known as these "holiday" items', 'answer': 'Easter eggs', 'answered': False}, {'category': 'hidden', 'id': 57354, 'value': 800, 'question': 'In 1962 a Louisiana company got a patent for a device that added these to motion pictures in theaters', 'answer': 'subliminal advertisements', 'answered': False}, {'category': 'hidden', 'id': 57360, 'value': 1000, 'question': 'Latin for "things to be done", you have to watch out for a person\'s hidden one', 'answer': 'agenda', 'answered': False}]}
     
     cur.execute("INSERT INTO rooms(room_name, board, player1, started, complete) VALUES (%s,%s,%s, 0, 0)",(room_name,json.dumps(new_board),connected_users[access_token]['auth0_code']))
     cur.execute('SELECT room_id FROM rooms WHERE room_name = %s',(room_name,))
@@ -354,7 +356,7 @@ def ping_check():
         ping_count = ping_count + 1
 
 def buzzIn(room_id):
-    socketio.sleep(2)
+    socketio.sleep(3)
     socketio.emit('buzzable', {'buzz':True, 'buzzable_players':room_list[room_id]['buzzable_players']}, namespace='/jep', room=str(room_id))
 
 def buzzBackground(args):
@@ -365,6 +367,9 @@ def buzzBackground(args):
     if room_list[room_id]['buzzedIn'] == 0:
         category, clue = catclue.split('|')
         clue = int(clue)
+        room_list[room_id]['answer_count'] = room_list[room_id].get('answer_count', 0) + 1
+        if room_list[room_id].get('answer_count', 0) >= 5:
+            calculate_winner(room_id)
         socketio.emit('no_buzz', { 'screen_clicked':catclue}, namespace='/jep', room=str(room_id))
         socketio.emit('no_correct_answer', { 'position':room_list[room_id]['active_player'], 'answer': room_list[room_id]['board'][category][clue]['answer']}, namespace='/jep', room=str(room_id))
 
@@ -389,12 +394,26 @@ def buzz_in_background(room_id):
             room_list[room_id]['answer_timer'] = socketio.start_background_task(answer_timer,room_id)
 
 def answer_timer(room_id):
-    socketio.sleep(10)
     global room_list
-    room_list[room_id]
-    # Get the question id and player pos to use to make sure it's ending right turn
-    # store at start, sleep, then compare.
-    # if qID = screenclicked question and buzzed in = pos
+    pos = room_list[room_id]['buzzedIn']
+    question = room_list[room_id]['screen_clicked']
+    socketio.sleep(7)
+    if room_list[room_id]['buzzedIn'] == pos and question == room_list[room_id]['screen_clicked']:
+        socketio.emit('take_too_long', {}, namespace='/jep', room=str(room_id))
+
+def calculate_winner(room_id):
+    global room_list
+    highest_score = -99999999999
+    highest_player = ''
+    for player in room_list[room_id]['players']:
+        if player == 'one' or player == 'two' or player == 'three':
+            if room_list[room_id]['players'][player]['username'] != '':
+                if room_list[room_id]['players'][player]['score'] > highest_score:
+                    highest_score = room_list[room_id]['players'][player]['score']
+                    highest_player = room_list[room_id]['players'][player]['username']
+                elif room_list[room_id]['players'][player]['score'] == highest_score:
+                    highest_player = [highest_player, room_list[room_id]['players'][player]['username']]
+    socketio.emit('winner', {'username':highest_player}, namespace='/jep', room=str(room_id))
 
 class jeopardy_socket(Namespace):
 
@@ -463,7 +482,7 @@ class jeopardy_socket(Namespace):
                             room_list[room_id]['players'][pos]['username'] = ""
                             room_list[room_id]['players'][pos]['score'] = 0
                 room_list[room_id]['init'] = True
-            room = copy.deepcopy(room_list[room_id])
+            room = json.loads(json.dumps(room_list[room_id]))
             for pos in room['players']:
                 if pos == 'one' or pos == 'two' or pos == 'three':
                     if room['players'][pos].get('auth0_code', None) != None:
@@ -547,7 +566,7 @@ class jeopardy_socket(Namespace):
                             room_list[room_id]['buzzable_players'].append(pos)
                 room_list[room_id]['selected_board'] = room_list[room_id]['screen_clicked']
                 room_list[room_id]['buzzedPlayerTimes'] = {'one':'','two':'','three':''}
-                emit('screen_selected', { 'category':category, 'clue':clue, 'screen_text': room_list[room_id]['board'][category][clue]['question'], 'active_player':0 }, room=str(room_id))
+                emit('screen_selected', { 'category':category, 'clue':clue, 'screen_text': room_list[room_id]['board'][category][clue]['question'], 'active_player':0, 'x_and_y':message['x_and_y']}, room=str(room_id))
                 thread_lock_back = Lock()
                 with thread_lock_back:
                     socketio.start_background_task(buzzIn,room_id)
@@ -588,30 +607,35 @@ class jeopardy_socket(Namespace):
         answer = message['answer']
         pos = req_ids[request.sid]['player_num']
         if numbers[room_list[room_id]['buzzedIn']] == req_ids[request.sid]['player_num']:
+            room_list[room_id]['buzzedIn'] = 0
             category, clue = room_list[room_id]['selected_board'].split('|')
             clue = int(clue)
             real_answer = re.sub(r'<.+?>','',room_list[room_id]['board'][category][clue]['answer'])
-            # match = re.search(re.sub(r'[^A-Za-z\s]','',answer.lower()),re.sub(r'[^A-Za-z\s]','',real_answer.lower()))
+            real_answer = re.sub(r'(?<=\b)(the|a|an)\s?(?=\b)','',real_answer)
+            # match = re.search(re.sub(r'[^A-Za-z0-9\s]','',answer.lower()),re.sub(r'[^A-Za-z0-9\s]','',real_answer.lower()))
             # if match != None:
             #     match = match.group()
             # else:
             #     match = ''
 
-            ratio = fuzz.ratio(re.sub(r'[^A-Za-z\s]','',answer.lower()), re.sub(r'[^A-Za-z\s]','',real_answer.lower()))
-            token_sort = fuzz.token_sort_ratio(re.sub(r'[^A-Za-z\s]','',answer.lower()), re.sub(r'[^A-Za-z\s]','',real_answer.lower()))
-            token_set = fuzz.token_set_ratio(re.sub(r'[^A-Za-z\s]','',answer.lower()), re.sub(r'[^A-Za-z\s]','',real_answer.lower()))
+            ratio = fuzz.ratio(re.sub(r'[^A-Za-z0-9\s]','',answer.lower()), re.sub(r'[^A-Za-z0-9\s]','',real_answer.lower()))
+            token_sort = fuzz.token_sort_ratio(re.sub(r'[^A-Za-z0-9\s]','',answer.lower()), re.sub(r'[^A-Za-z0-9\s]','',real_answer.lower()))
+            token_set = fuzz.token_set_ratio(re.sub(r'[^A-Za-z0-9\s]','',answer.lower()), re.sub(r'[^A-Za-z0-9\s]','',real_answer.lower()))
 
-            print_answer = re.sub(r'[^A-Za-z\s]','',answer.lower())
-            pint_real_answer = re.sub(r'[^A-Za-z\s]','',real_answer.lower())
+            print_answer = re.sub(r'[^A-Za-z0-9\s]','',answer.lower())
+            pint_real_answer = re.sub(r'[^A-Za-z0-9\s]','',real_answer.lower())
             
-            # print(fuzz.ratio(re.sub(r'[^A-Za-z\s]','',match), re.sub(r'[^A-Za-z\s]','',real_answer)))
-            # print(fuzz.partial_ratio(re.sub(r'[^A-Za-z\s]','',match), re.sub(r'[^A-Za-z\s]','',real_answer)))
-            # print(fuzz.token_sort_ratio(re.sub(r'[^A-Za-z\s]','',match), re.sub(r'[^A-Za-z\s]','',real_answer)))
-            # print(fuzz.token_set_ratio(re.sub(r'[^A-Za-z\s]','',match), re.sub(r'[^A-Za-z\s]','',real_answer)))
+            # print(fuzz.ratio(re.sub(r'[^A-Za-z0-9\s]','',match), re.sub(r'[^A-Za-z0-9\s]','',real_answer)))
+            # print(fuzz.partial_ratio(re.sub(r'[^A-Za-z0-9\s]','',answer.lower()), re.sub(r'[^A-Za-z0-9\s]','',real_answer.lower())))
+            # print(fuzz.token_sort_ratio(re.sub(r'[^A-Za-z0-9\s]','',match), re.sub(r'[^A-Za-z0-9\s]','',real_answer)))
+            # print(fuzz.token_set_ratio(re.sub(r'[^A-Za-z0-9\s]','',match), re.sub(r'[^A-Za-z0-9\s]','',real_answer)))
             print(f"{print_answer} | {pint_real_answer} | ratio: {ratio}%, sort: {token_sort}%, set: {token_set}% = {(ratio + token_sort + token_set) // 3}")
-            # print(len(re.sub(r'[^A-Za-z\s]','',match)) / len(re.sub(r'[^A-Za-z\s]','',real_answer)) * 100)
+            # print(len(re.sub(r'[^A-Za-z0-9\s]','',match)) / len(re.sub(r'[^A-Za-z0-9\s]','',real_answer)) * 100)
             if (ratio + token_sort + token_set) // 3 > 50 and (ratio == 100 or token_sort == 100 or token_set == 100) :
                 print('correct')
+                room_list[room_id]['answer_count'] = room_list[room_id].get('answer_count', 0) + 1
+                if room_list[room_id].get('answer_count', 0) >= 5:
+                    calculate_winner(room_id)
                 room_list[room_id]['players'][pos]['score'] = room_list[room_id]['players'][pos]['score'] + room_list[room_id]['board'][category][clue]['value']
                 room_list[room_id]['active_player'] = numbers.index(pos)
                 emit('answer_response', { 'correct':True, 'position': pos, 'new_score': room_list[room_id]['players'][pos]['score'] }, room=str(room_id))
@@ -620,6 +644,9 @@ class jeopardy_socket(Namespace):
                 room_list[room_id]['players'][pos]['score'] = room_list[room_id]['players'][pos]['score'] - room_list[room_id]['board'][category][clue]['value']
                 emit('answer_response', { 'correct':False, 'position': pos, 'new_score':room_list[room_id]['players'][pos]['score'], 'buzzable_players':room_list[room_id]['buzzable_players'] }, room=str(room_id))
                 if len(room_list[room_id]['buzzable_players']) == 0:
+                    room_list[room_id]['answer_count'] = room_list[room_id].get('answer_count', 0) + 1
+                    if room_list[room_id].get('answer_count', 0) >= 5:
+                        calculate_winner(room_id)
                     emit('no_buzz', { 'screen_clicked':room_list[room_id]['screen_clicked'] }, room=str(room_id))
                     emit('no_correct_answer', { 'position':room_list[room_id]['active_player'], 'answer': room_list[room_id]['board'][category][clue]['answer']}, room=str(room_id))
                 else:
