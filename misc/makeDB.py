@@ -17,12 +17,13 @@ cur.execute("DROP TABLE IF EXISTS rooms")
 cur.execute("""CREATE TABLE rooms(
   room_id SERIAL PRIMARY KEY,
   room_name TEXT NOT NULL,
+  room_owner TEXT NOT NULL,
   player1 TEXT,
-  player1value INT,
+  player1score INT,
   player2 TEXT,
-  player2value INT,
+  player2score INT,
   player3 TEXT,
-  player3value INT,
+  player3score INT,
   board_id INT,
   started INT NOT NULL,
   complete INT NOT NULL
@@ -55,12 +56,12 @@ cur.execute("DROP TABLE IF EXISTS clues")
 
 cur.execute("""CREATE TABLE clues(
   clue_id SERIAL PRIMARY KEY,
-  clue_api_id INT NOT NULL,
-  clue_question TEXT NOT NULL,
-  clue_answer TEXT NOT NULL,
-  clue_value INT NOT NULL
-)
-""")
+  api_id INT NOT NULL,
+  question TEXT NOT NULL,
+  answer TEXT NOT NULL,
+  value INT NOT NULL,
+  answered BOOLEAN NOT NULL
+)""")
 
 
 conn.commit()

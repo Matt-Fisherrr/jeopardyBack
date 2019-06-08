@@ -18,22 +18,23 @@ class Room():
 
         # Players
         self.active_player = 0
+        self.room_owner = ''
         self.players = {
             1: {
                 'auth0_code': '',
-                'score': 0,
+                'value': 0,
                 'ping': 0,
                 'ready': False
             },
             2: {
                 'auth0_code': '',
-                'score': 0,
+                'value': 0,
                 'ping': 0,
                 'ready': False
             },
             3: {
                 'auth0_code': '',
-                'score': 0,
+                'value': 0,
                 'ping': 0,
                 'ready': False
             }
@@ -60,5 +61,17 @@ class Room():
         # Viewers
         self.viewers = []
 
-        def save_new_board(self):
-            cur.execute()
+    def save_new_board(self):
+        cat_id = []
+        for column in self.board:
+            for title in column:
+                clue_id = []
+                for clue in column[title]:
+                    gv.cur.execute("INSERT INTO clues(api_id, question, answer, value, answered) VALUES (%s, %s, %s, %s, FALSE) RETURNING clue_id", (clue['id'], clue['question'], clue['answer'], clue['value']))
+                    clue_id.append(gv.cur.fetchone()[0])
+            gv.cur.execute("INSERT INTO categories(cat_name, clue_one, clue_two, clue_three, clue_four, clue_five) VALUES (%s, %s, %s, %s, %s, %s) RETURNING cat_id", (title, clue_id[0], clue_id[1], clue_id[2], clue_id[3], clue_id[4]))
+            cat_id.append(gv.cur.fetchone()[0])
+        gv.cur.execute("INSERT INTO boards(cat_one, cat_two, cat_three, cat_four, cat_five) VALUES (%s, %s, %s, %s, %s) RETURNING board_id", (cat_id[0], cat_id[1], cat_id[2], cat_id[3], cat_id[4]))
+        board_id = gv.cur.fetchone()[0]
+        gv.cur.execute("UPDATE rooms SET board_id=%s WHERE room_id = %s", (board_id, self.room_id))
+        gv.conn.commit()
