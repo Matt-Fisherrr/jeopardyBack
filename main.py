@@ -1,5 +1,6 @@
 from flask import Flask
 from flask_socketio import SocketIO
+import psycopg2, os
 
 app = Flask(__name__, static_folder="build/static", template_folder="build")
 app.secret_key = 'app secret key'
@@ -7,11 +8,14 @@ socketio = SocketIO(app, async_mode='eventlet')
 
 with app.app_context():
     from files.auth import Auth
+    from files.global_vars import global_variables
+    global_vars = global_variables()
     import files.routes
     from files.socketControl import jeopardy_socket
 
+
+
 if __name__ == '__main__':
-    socketio.on_namespace(jeopardy_socket('/jep'))
     socketio.run(app, debug=True, host= '0.0.0.0')
     # , host= '0.0.0.0'
 

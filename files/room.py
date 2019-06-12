@@ -1,5 +1,6 @@
-import files.global_vars as gv
+# import files.global_vars as gv
 from threading import Lock
+from main import global_vars as gv
 
 class Room():
     def __init__(self):
@@ -22,20 +23,23 @@ class Room():
         self.players = {
             1: {
                 'auth0_code': '',
+                'username':'',
                 'value': 0,
-                'ping': 0,
+                'ping': [],
                 'ready': False
             },
             2: {
                 'auth0_code': '',
+                'username':'',
                 'value': 0,
-                'ping': 0,
+                'ping': [],
                 'ready': False
             },
             3: {
                 'auth0_code': '',
+                'username':'',
                 'value': 0,
-                'ping': 0,
+                'ping': [],
                 'ready': False
             }
         }
@@ -75,3 +79,30 @@ class Room():
         board_id = gv.cur.fetchone()[0]
         gv.cur.execute("UPDATE rooms SET board_id=%s WHERE room_id = %s", (board_id, self.room_id))
         gv.conn.commit()
+
+    def get_players(self):
+        players = {}
+        for num in range(1,4):
+            if self.players[num]['username'] == '':
+                gv.cur.execute("SELECT username FROM players WHERE auth0_code = %s",(self.players[num]['auth0_code'],))
+                try:
+                    username = gv.cur.fetchone()[0]
+                    self.players[num]['username'] = username
+                    players[num] = {
+                        'username':username,
+                        'score':self.players[num]['value'],
+                        'ready':self.players[num]['ready']
+                    }
+                except Exception as e:
+                    players[num] = {
+                        'username':'',
+                        'score':0,
+                        'ready':False
+                    }
+            else:
+                players[num] = {
+                    'username':self.players[num]['username'],
+                    'score':self.players[num]['value'],
+                    'ready':self.players[num]['ready']
+                    }
+        return players

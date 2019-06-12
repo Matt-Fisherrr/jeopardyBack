@@ -1,9 +1,11 @@
 from flask import Flask, request, jsonify, render_template, send_from_directory, current_app as app
 from flask_cors import cross_origin
-import files.global_vars as gv
+# import files.global_vars as gv
 from jose import jwt
 from .room import Room
 import hashlib, re, requests, random
+
+from main import global_vars as gv
 
 @app.route('/', defaults={'path': ''})
 @app.route('/<path:path>')
@@ -114,8 +116,9 @@ def get_board():
     access_token = gv.auth.get_token_auth_header(request)
     room_id = int(request.headers['room_id'])
     try:
-        board = gv.room_list[room_id].get_board()
+        board = gv.room_list[room_id].board
     except:
+        print('except')
         gv.cur.execute("SELECT board_id, room_name, player1, player1score, player2, player2score, player3, player3score, started FROM rooms WHERE room_id = %s",(room_id,))
         board_id, room_name, player1, player1score, player2, player2score, player3, player3score, started = gv.cur.fetchone()
         
@@ -130,7 +133,11 @@ def get_board():
         gv.room_list[room_id].name = room_name
         gv.room_list[room_id].room_id = room_id
         gv.room_list[room_id].started = started
-        gv.room_list[room_id].room_owner = gv.connected_users[access_token]['auth0_code']
+        try:
+            gv.room_list[room_id].room_owner = gv.connected_users[access_token]['auth0_code']
+        except:
+            del gv.room_list[room_id]
+            return jsonify({'board':'board'})
     
 
         board = []
@@ -144,5 +151,6 @@ def get_board():
                 gv.cur.execute("SELECT * FROM clues WHERE clue_id = %s", (clue,))
                 curr_clue = gv.cur.fetchone()[1:]
                 board[i][curr_cat[0]].append({ 'id':curr_clue[0], 'question':curr_clue[1], 'answer':curr_clue[2], 'value':curr_clue[3], 'answered':curr_clue[4]})
+        gv.room_list[room_id].board = board
         
     return jsonify({'board': board})
