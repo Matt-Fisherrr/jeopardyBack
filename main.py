@@ -11,7 +11,7 @@ with app.app_context():
     from files.global_vars import global_variables
     global_vars = global_variables()
     import files.routes
-    from files.socketControl import jeopardy_socket
+    # from files.socketControl import jeopardy_socket
 
 
 

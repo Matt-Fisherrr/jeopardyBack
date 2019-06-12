@@ -1,66 +1,7 @@
-from flask import Flask, request, jsonify, render_template, send_from_directory, current_app as app
-from flask_cors import cross_origin
-# import files.global_vars as gv
-from jose import jwt
-from .room import Room
-import hashlib, re, requests, random
-
+from flask import request, jsonify, current_app as app
 from main import global_vars as gv
-
-@app.route('/', defaults={'path': ''})
-@app.route('/<path:path>')
-def index(path):
-    if path == 'favicon.ico':
-        return send_from_directory('build/',path)
-    return render_template('index.html')
-
-@app.route('/api/connect', methods=['POST'])
-@cross_origin(allow_headers=['authorization', 'content-type'], allow_methods=['POST, OPTIONS'])
-@gv.auth.auth_required(request)
-def connect():
-    id_token = request.get_json()['IDToken']
-    access_token = gv.auth.get_token_auth_header(request)
-
-    id_decode = jwt.decode(id_token, gv.jwks, algorithms=gv.auth.ALGORITHMS, audience="3eCEPx9I6Wr0N3FIJAwXXi5caFdRfZzV", access_token=access_token)
-    hashed_id = str(hashlib.sha512(id_decode['sub'].encode('utf-8') + '8616b99be2344c82ad77f24977eac12e'.encode('utf-8')).hexdigest())
-    gv.cur.execute("SELECT username FROM players WHERE auth0_code = %s", (hashed_id,))
-    username = gv.cur.fetchone()
-
-    gv.connected_users[access_token] = {'access_token':access_token, 'id_token':id_token, 'auth0_code':hashed_id}
-    if username == None:
-        return jsonify({'response': 'username'})
-
-    gv.connected_users[access_token]['username'] = username[0]
-    return jsonify({'response': True, 'username': username[0]})
-
-@app.route('/api/connect/reg', methods=['POST'])
-@cross_origin(allow_headers=['authorization', 'content-type'], allow_methods=['POST, OPTIONS'])
-@gv.auth.auth_required(request)
-def set_username():
-    access_token = gv.auth.get_token_auth_header(request)
-    username = request.get_json()['user']
-    gv.cur.execute("SELECT count(auth0_code) FROM players WHERE auth0_code = %s", (gv.connected_users[access_token]['auth0_code'],))
-    if gv.cur.fetchone()[0] == 0:
-        gv.cur.execute("INSERT INTO players(username, auth0_code) VALUES (%s, %s)", (username, gv.connected_users[access_token]['auth0_code']))
-    else:
-        gv.cur.execute("UPDATE players SET username = %s WHERE auth0_code = %s", (username, gv.connected_users[access_token]['auth0_code']))
-    gv.connected_users[access_token]['username'] = username
-    gv.conn.commit()
-    return jsonify({'response': True, 'username': username})
-
-@app.route('/api/roomlist', methods=['GET'])
-@cross_origin(allow_headers=['authorization', 'content-type'], allow_methods=['GET, OPTIONS'])
-@gv.auth.auth_required(request)
-def get_room_list():
-    access_token = gv.auth.get_token_auth_header(request)
-    rooms = []
-    for room in gv.room_list:
-        rooms.append({'name':gv.room_list[room].name, 'id':gv.room_list[room].room_id, 'players':'started' if gv.room_list[room].started else gv.room_list[room].player_counts['total_count'], 'old':False })
-    gv.cur.execute("SELECT room_name, room_id, player1, player2, player3, started FROM rooms WHERE room_owner = %s AND complete = 0",(gv.connected_users[access_token]['auth0_code'],))
-    for room in gv.cur.fetchall():
-        if room[1] not in list(gv.room_list.keys()):
-            rooms.append({'name':room[0], 'id':room[1], 'players':'started' if room[5] == 1 else len([p for p in room[2:4] if p != None]), 'old':True })
-    return jsonify(rooms)
+from flask_cors import cross_origin
+from files.room import Room
 
 @app.route('/api/roomlist/create', methods=['POST'])
 @cross_origin(allow_headers=['authorization', 'content-type'], allow_methods=['POST, OPTIONS'])
@@ -108,49 +49,3 @@ def make_room():
     
     gv.conn.commit()
     return jsonify({"room_id":room_id})
-
-@app.route('/api/roomlist/getboard', methods=['GET'])
-@cross_origin(allow_headers=['authorization', 'content-type', 'room_id'], allow_methods=['GET, OPTIONS'])
-@gv.auth.auth_required(request)
-def get_board():
-    access_token = gv.auth.get_token_auth_header(request)
-    room_id = int(request.headers['room_id'])
-    try:
-        board = gv.room_list[room_id].board
-    except:
-        print('except')
-        gv.cur.execute("SELECT board_id, room_name, player1, player1score, player2, player2score, player3, player3score, started FROM rooms WHERE room_id = %s",(room_id,))
-        board_id, room_name, player1, player1score, player2, player2score, player3, player3score, started = gv.cur.fetchone()
-        
-        gv.room_list[room_id] = Room()
-        gv.room_list[room_id].players[1]['auth0_code'] = player1
-        gv.room_list[room_id].players[1]['score'] = player1score
-        gv.room_list[room_id].players[2]['auth0_code'] = player2
-        gv.room_list[room_id].players[2]['score'] = player2score
-        gv.room_list[room_id].players[3]['auth0_code'] = player3
-        gv.room_list[room_id].players[3]['score'] = player3score
-
-        gv.room_list[room_id].name = room_name
-        gv.room_list[room_id].room_id = room_id
-        gv.room_list[room_id].started = started
-        try:
-            gv.room_list[room_id].room_owner = gv.connected_users[access_token]['auth0_code']
-        except:
-            del gv.room_list[room_id]
-            return jsonify({'board':'board'})
-    
-
-        board = []
-        gv.cur.execute("SELECT * FROM boards WHERE board_id = %s", (board_id,))
-        cats = gv.cur.fetchone()[1:]
-        for i, cat in enumerate(cats):
-            gv.cur.execute("SELECT * FROM categories WHERE cat_id = %s", (cat,))
-            curr_cat = gv.cur.fetchone()[1:]
-            board.append({curr_cat[0]:[]})
-            for clue in curr_cat[1:]:
-                gv.cur.execute("SELECT * FROM clues WHERE clue_id = %s", (clue,))
-                curr_clue = gv.cur.fetchone()[1:]
-                board[i][curr_cat[0]].append({ 'id':curr_clue[0], 'question':curr_clue[1], 'answer':curr_clue[2], 'value':curr_clue[3], 'answered':curr_clue[4]})
-        gv.room_list[room_id].board = board
-        
-    return jsonify({'board': board})

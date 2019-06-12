@@ -24,21 +24,21 @@ class Room():
             1: {
                 'auth0_code': '',
                 'username':'',
-                'value': 0,
+                'score': 0,
                 'ping': [],
                 'ready': False
             },
             2: {
                 'auth0_code': '',
                 'username':'',
-                'value': 0,
+                'score': 0,
                 'ping': [],
                 'ready': False
             },
             3: {
                 'auth0_code': '',
                 'username':'',
-                'value': 0,
+                'score': 0,
                 'ping': [],
                 'ready': False
             }
@@ -83,6 +83,7 @@ class Room():
     def get_players(self):
         players = {}
         for num in range(1,4):
+            self.players[num]['score']
             if self.players[num]['username'] == '':
                 gv.cur.execute("SELECT username FROM players WHERE auth0_code = %s",(self.players[num]['auth0_code'],))
                 try:
@@ -90,7 +91,7 @@ class Room():
                     self.players[num]['username'] = username
                     players[num] = {
                         'username':username,
-                        'score':self.players[num]['value'],
+                        'score':self.players[num]['score'],
                         'ready':self.players[num]['ready']
                     }
                 except Exception as e:
@@ -102,7 +103,7 @@ class Room():
             else:
                 players[num] = {
                     'username':self.players[num]['username'],
-                    'score':self.players[num]['value'],
+                    'score':self.players[num]['score'],
                     'ready':self.players[num]['ready']
                     }
         return players

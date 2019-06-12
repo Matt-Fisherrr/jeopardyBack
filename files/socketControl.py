@@ -26,17 +26,21 @@ def buzzIn(room_id):
     socketio.emit('buzzable', {'buzz':True, 'buzzable_players':gv.room_list[room_id].buzzable_players}, room=str(room_id), namespace='/jep')
 
 def buzzBackground(args):
-    room_id = args['room_id']
-    catclue = args['screen_clicked']
-    socketio.sleep(7)
-    if gv.room_list[room_id].buzzedIn == 0:
-        category_num, clue = map(int,catclue.split('|'))
-        category_name = list(gv.room_list[room_id].board[category_num].keys())[0]
-        gv.room_list[room_id].answer_count += 1
-        if gv.room_list[room_id].answer_count >= 5:
-            calculate_winner(room_id)
-        socketio.emit('no_buzz', { 'screen_clicked':catclue}, room=str(room_id), namespace='/jep')
-        socketio.emit('no_correct_answer', { 'position':gv.room_list[room_id].active_player, 'answer': gv.room_list[room_id].board[category_num][category_name][clue]['answer']}, room=str(room_id), namespace='/jep')
+    try:
+        room_id = args['room_id']
+        catclue = args['screen_clicked']
+        socketio.sleep(7)
+        if gv.room_list[room_id].buzzedIn == 0:
+            category_num, clue = map(int,catclue.split('|'))
+            category_name = list(gv.room_list[room_id].board[category_num].keys())[0]
+            gv.room_list[room_id].answer_count += 1
+            if gv.room_list[room_id].answer_count >= 5:
+                calculate_winner(room_id)
+            socketio.emit('no_buzz', { 'screen_clicked':catclue}, room=str(room_id), namespace='/jep')
+            socketio.emit('no_correct_answer', { 'position':gv.room_list[room_id].active_player, 'answer': gv.room_list[room_id].board[category_num][category_name][clue]['answer']}, room=str(room_id), namespace='/jep')
+    except Exception as e:
+        print(e)
+        emit('error',{}, room=str(room_id), namespace='/jep')
 
 def buzz_in_background(room_id):
     if len(gv.room_list[room_id].buzzable_players) > 1:
@@ -58,11 +62,15 @@ def buzz_in_background(room_id):
             gv.room_list[room_id].answer_timer = socketio.start_background_task(answer_timer,room_id)
 
 def answer_timer(room_id):
-    pos = gv.room_list[room_id].buzzedIn
-    question = gv.room_list[room_id].screen_clicked
-    socketio.sleep(7)
-    if gv.room_list[room_id].buzzedIn == pos and question == gv.room_list[room_id].screen_clicked:
-        socketio.emit('take_too_long', {}, room=str(room_id), namespace='/jep')
+    try:
+        pos = gv.room_list[room_id].buzzedIn
+        question = gv.room_list[room_id].screen_clicked
+        socketio.sleep(7)
+        if gv.room_list[room_id].buzzedIn == pos and question == gv.room_list[room_id].screen_clicked:
+            socketio.emit('take_too_long', {}, room=str(room_id), namespace='/jep')
+    except Exception as e:
+        print(e)
+        emit('error',{}, room=str(room_id), namespace='/jep')
 
 def calculate_winner(room_id):
     highest_score = -99999999999
@@ -77,6 +85,31 @@ def calculate_winner(room_id):
                     highest_player = [highest_player, gv.room_list[room_id].players[player]['username']]
     socketio.emit('winner', {'username':highest_player}, room=str(room_id), namespace='/jep')
 
+def screen_timer(room_id):
+    gv.room_list[room_id].thread_lock_buzzed_in_back = Lock()
+    with gv.room_list[room_id].thread_lock_buzzed_in_back:
+        socketio.start_background_task(buzzIn,room_id)
+        gv.room_list[room_id].buzzed_in_back = None
+        gv.room_list[room_id].buzz_background = None
+        gv.room_list[room_id].buzzedIn = 0
+        gv.room_list[room_id].selected_time = datetime.datetime.now()
+        gv.room_list[room_id].buzz_background = socketio.start_background_task(buzzBackground,{'room_id':room_id, 'screen_clicked':gv.room_list[room_id].screen_clicked})
+
+def check_answer(answer, real_answer):
+    ratio = fuzz.ratio(re.sub(r'[^A-Za-z0-9\s]','',answer.lower()), re.sub(r'[^A-Za-z0-9\s]','',real_answer.lower()))
+    token_sort = fuzz.token_sort_ratio(re.sub(r'[^A-Za-z0-9\s]','',answer.lower()), re.sub(r'[^A-Za-z0-9\s]','',real_answer.lower()))
+    token_set = fuzz.token_set_ratio(re.sub(r'[^A-Za-z0-9\s]','',answer.lower()), re.sub(r'[^A-Za-z0-9\s]','',real_answer.lower()))
+
+    print_answer = re.sub(r'[^A-Za-z0-9\s]','',answer.lower())
+    print_real_answer = re.sub(r'[^A-Za-z0-9\s]','',real_answer.lower())
+    
+    # print(fuzz.ratio(re.sub(r'[^A-Za-z0-9\s]','',match), re.sub(r'[^A-Za-z0-9\s]','',real_answer)))
+    # print(fuzz.partial_ratio(re.sub(r'[^A-Za-z0-9\s]','',answer.lower()), re.sub(r'[^A-Za-z0-9\s]','',real_answer.lower())))
+    # print(fuzz.token_sort_ratio(re.sub(r'[^A-Za-z0-9\s]','',match), re.sub(r'[^A-Za-z0-9\s]','',real_answer)))
+    # print(fuzz.token_set_ratio(re.sub(r'[^A-Za-z0-9\s]','',match), re.sub(r'[^A-Za-z0-9\s]','',real_answer)))
+    print(f"{print_answer} | {print_real_answer} | ratio: {ratio}%, sort: {token_sort}%, set: {token_set}% = {(ratio + token_sort + token_set) // 3}")
+    # print(len(re.sub(r'[^A-Za-z0-9\s]','',match)) / len(re.sub(r'[^A-Za-z0-9\s]','',real_answer)) * 100)
+    return (ratio + token_sort + token_set) // 3 > 50 and (ratio == 100 or token_sort == 100 or token_set == 100)
 
 class jeopardy_socket(Namespace):
 
@@ -153,7 +186,6 @@ class jeopardy_socket(Namespace):
             #                 gv.room_list[room_id]['players']['count'] = gv.room_list[room_id]['players']['count'] + 1
             #                 join_room('players')
             # print(gv.req_ids[request.sid])
-            print(gv.room_list[room_id].player_counts['count'])
             for num in gv.room_list[room_id].players:
                 if gv.room_list[room_id].players[num]['auth0_code'] == gv.req_ids[request.sid]['auth0_code']:
                     gv.req_ids[request.sid]['player_num'] = num
@@ -188,7 +220,6 @@ class jeopardy_socket(Namespace):
                 gv.room_list[room_id].players[position]['auth0_code'] = auth0_code
                 gv.cur.execute("SELECT username FROM players WHERE auth0_code = %s",(gv.room_list[room_id].players[position].get('auth0_code','0'),))
                 gv.room_list[room_id].players[position]['username'] = gv.cur.fetchone()[0]
-                print(gv.room_list[room_id].players[position]['username'])
                 gv.req_ids[request.sid]['player_num'] = position
                 gv.room_list[room_id].player_counts['count'] = gv.room_list[room_id].player_counts.get('count',0) + 1
                 gv.room_list[room_id].player_counts['total_count'] = gv.room_list[room_id].player_counts.get('total_count',0) + 1
@@ -227,14 +258,7 @@ class jeopardy_socket(Namespace):
                 gv.room_list[room_id].selected_board = gv.room_list[room_id].screen_clicked
                 gv.room_list[room_id].buzzedPlayerTimes = {1:'',2:'',3:''}
                 emit('screen_selected', { 'category':category_num, 'clue':clue, 'screen_text': gv.room_list[room_id].board[category_num][category_name][clue]['question'], 'active_player':0, 'x_and_y':message['x_and_y']}, room=str(room_id))
-                thread_lock_back = Lock()
-                with thread_lock_back:
-                    socketio.start_background_task(buzzIn,room_id)
-                    gv.room_list[room_id].buzzed_in_back = None
-                    gv.room_list[room_id].buzz_background = None
-                    gv.room_list[room_id].buzzedIn = 0
-                    gv.room_list[room_id].selected_time = datetime.datetime.now()
-                    gv.room_list[room_id].buzz_background = socketio.start_background_task(buzzBackground,{'room_id':room_id, 'screen_clicked':gv.room_list[room_id].screen_clicked})
+                screen_timer(room_id)
 
     def on_buzz_in(self):
         room_id = gv.req_ids[request.sid]['room_id']
@@ -263,59 +287,36 @@ class jeopardy_socket(Namespace):
         room_id = gv.req_ids[request.sid]['room_id']
         answer = message['answer']
         pos = gv.req_ids[request.sid]['player_num']
-        if gv.room_list[room_id]['buzzedIn'] == gv.req_ids[request.sid]['player_num']:
-            gv.room_list[room_id]['buzzedIn'] = 0
-            category, clue = gv.room_list[room_id]['selected_board'].split('|')
-            clue = int(clue)
-            real_answer = re.sub(r'<.+?>','',gv.room_list[room_id]['board'][category][clue]['answer'])
+
+        if gv.room_list[room_id].buzzedIn == gv.req_ids[request.sid]['player_num']:
+            gv.room_list[room_id].buzzedIn = 0
+
+            category_num, clue = map(int,gv.room_list[room_id].selected_board.split('|'))
+            category_name = list(gv.room_list[room_id].board[category_num].keys())[0]
+
+            real_answer = re.sub(r'<.+?>','',gv.room_list[room_id].board[category_num][category_name][clue]['answer'])
             real_answer = re.sub(r'(?<=\b)(the|a|an)\s?(?=\b)','',real_answer)
-            # match = re.search(re.sub(r'[^A-Za-z0-9\s]','',answer.lower()),re.sub(r'[^A-Za-z0-9\s]','',real_answer.lower()))
-            # if match != None:
-            #     match = match.group()
-            # else:
-            #     match = ''
 
-            ratio = fuzz.ratio(re.sub(r'[^A-Za-z0-9\s]','',answer.lower()), re.sub(r'[^A-Za-z0-9\s]','',real_answer.lower()))
-            token_sort = fuzz.token_sort_ratio(re.sub(r'[^A-Za-z0-9\s]','',answer.lower()), re.sub(r'[^A-Za-z0-9\s]','',real_answer.lower()))
-            token_set = fuzz.token_set_ratio(re.sub(r'[^A-Za-z0-9\s]','',answer.lower()), re.sub(r'[^A-Za-z0-9\s]','',real_answer.lower()))
-
-            print_answer = re.sub(r'[^A-Za-z0-9\s]','',answer.lower())
-            pint_real_answer = re.sub(r'[^A-Za-z0-9\s]','',real_answer.lower())
-            
-            # print(fuzz.ratio(re.sub(r'[^A-Za-z0-9\s]','',match), re.sub(r'[^A-Za-z0-9\s]','',real_answer)))
-            # print(fuzz.partial_ratio(re.sub(r'[^A-Za-z0-9\s]','',answer.lower()), re.sub(r'[^A-Za-z0-9\s]','',real_answer.lower())))
-            # print(fuzz.token_sort_ratio(re.sub(r'[^A-Za-z0-9\s]','',match), re.sub(r'[^A-Za-z0-9\s]','',real_answer)))
-            # print(fuzz.token_set_ratio(re.sub(r'[^A-Za-z0-9\s]','',match), re.sub(r'[^A-Za-z0-9\s]','',real_answer)))
-            print(f"{print_answer} | {pint_real_answer} | ratio: {ratio}%, sort: {token_sort}%, set: {token_set}% = {(ratio + token_sort + token_set) // 3}")
-            # print(len(re.sub(r'[^A-Za-z0-9\s]','',match)) / len(re.sub(r'[^A-Za-z0-9\s]','',real_answer)) * 100)
-            if (ratio + token_sort + token_set) // 3 > 50 and (ratio == 100 or token_sort == 100 or token_set == 100) :
-                print('correct')
-                gv.room_list[room_id]['answer_count'] = gv.room_list[room_id].get('answer_count', 0) + 1
-                if gv.room_list[room_id].get('answer_count', 0) >= 5:
+            if check_answer(answer, real_answer):
+                gv.room_list[room_id].answer_count = gv.room_list[room_id].answer_count + 1
+                if gv.room_list[room_id].answer_count >= 5:
                     calculate_winner(room_id)
-                gv.room_list[room_id]['players'][pos]['score'] = gv.room_list[room_id]['players'][pos]['score'] + gv.room_list[room_id]['board'][category][clue]['value']
-                gv.room_list[room_id]['active_player'] = pos
-                emit('answer_response', { 'correct':True, 'position': pos, 'new_score': gv.room_list[room_id]['players'][pos]['score'] }, room=str(room_id))
-            else:
-                print('wrong')
-                gv.room_list[room_id]['players'][pos]['score'] = gv.room_list[room_id]['players'][pos]['score'] - gv.room_list[room_id]['board'][category][clue]['value']
-                emit('answer_response', { 'correct':False, 'position': pos, 'new_score':gv.room_list[room_id]['players'][pos]['score'], 'buzzable_players':gv.room_list[room_id]['buzzable_players'] }, room=str(room_id))
-                if len(gv.room_list[room_id]['buzzable_players']) == 0:
-                    gv.room_list[room_id]['answer_count'] = gv.room_list[room_id].get('answer_count', 0) + 1
-                    if gv.room_list[room_id].get('answer_count', 0) >= 5:
-                        calculate_winner(room_id)
-                    emit('no_buzz', { 'screen_clicked':gv.room_list[room_id]['screen_clicked'] }, room=str(room_id))
-                    emit('no_correct_answer', { 'position':gv.room_list[room_id]['active_player'], 'answer': gv.room_list[room_id]['board'][category][clue]['answer']}, room=str(room_id))
                 else:
-                    gv.room_list[room_id]['buzzedPlayerTimes'] = {'one':'','two':'','three':''}
-                    thread_lock_back = Lock()
-                    with thread_lock_back:
-                        socketio.start_background_task(buzzIn,room_id)
-                        gv.room_list[room_id]['buzzed_in_back'] = None
-                        gv.room_list[room_id]['buzz_background'] = None
-                        gv.room_list[room_id]['buzzedIn'] = 0
-                        gv.room_list[room_id]['selected_time'] = datetime.datetime.now()
-                        gv.room_list[room_id]['buzz_background'] = socketio.start_background_task(buzzBackground,{'room_id':room_id, 'screen_clicked':gv.room_list[room_id]['screen_clicked']})
+                    gv.room_list[room_id].players[pos]['score'] = gv.room_list[room_id].players[pos]['score'] + gv.room_list[room_id].board[category_num][category_name][clue]['value']
+                    gv.room_list[room_id].active_player = pos
+                    emit('answer_response', { 'correct':True, 'position': pos, 'new_score': gv.room_list[room_id].players[pos]['score'] }, room=str(room_id))
+            else:
+                gv.room_list[room_id].players[pos]['score'] = gv.room_list[room_id].players[pos]['score'] - gv.room_list[room_id].board[category_num][category_name][clue]['value']
+                emit('answer_response', { 'correct':False, 'position': pos, 'new_score':gv.room_list[room_id].players[pos]['score'], 'buzzable_players':gv.room_list[room_id].buzzable_players }, room=str(room_id))
+                if len(gv.room_list[room_id].buzzable_players) == 0:
+                    gv.room_list[room_id].answer_count = gv.room_list[room_id].answer_count + 1
+                    if gv.room_list[room_id].answer_count >= 5:
+                        calculate_winner(room_id)
+                    emit('no_buzz', { 'screen_clicked':gv.room_list[room_id].screen_clicked }, room=str(room_id))
+                    emit('no_correct_answer', { 'position':gv.room_list[room_id].active_player, 'answer': gv.room_list[room_id].board[category_num][category_name][clue]['answer']}, room=str(room_id))
+                else:
+                    gv.room_list[room_id].buzzedPlayerTimes = {1:'',2:'',3:''}
+                    screen_timer(room_id)
 
 
 
