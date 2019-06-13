@@ -6,7 +6,7 @@ class global_variables():
         self.auth = Auth()
         self.room_list = {}
         self.connected_users = {}
-        self.conn = psycopg2.connect(dbname=os.environ['DBNAME'], user=os.environ['USER'], password=os.environ['PASSWORD'], host=os.environ['HOST'])
+        self.conn = psycopg2.connect(os.environ['DATABASE_URL'])
         self.cur = self.conn.cursor()
         self.req_ids = {}
         self.jwks = self.auth.get_jwks()

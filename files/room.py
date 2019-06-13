@@ -65,6 +65,7 @@ class Room():
         # Viewers
         self.viewers = []
 
+    # Save the board into the database
     def save_new_board(self):
         cat_id = []
         for column in self.board:
@@ -80,6 +81,7 @@ class Room():
         gv.cur.execute("UPDATE rooms SET board_id=%s WHERE room_id = %s", (board_id, self.room_id))
         gv.conn.commit()
 
+    # Gets players in a better format
     def get_players(self):
         players = {}
         for num in range(1,4):

@@ -14,9 +14,8 @@ with app.app_context():
     from files.socketControl import jeopardy_socket
 
 
-
 if __name__ == '__main__':
-    socketio.run(app, debug=True, host= '0.0.0.0')
+    socketio.run(app, debug=False, host= '0.0.0.0')
     # , host= '0.0.0.0'
 
 
