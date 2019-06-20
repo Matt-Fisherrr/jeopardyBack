@@ -1,6 +1,6 @@
 # import files.global_vars as gv
 from threading import Lock
-from main import global_vars as gv
+from __main__ import global_vars as gv
 
 class Room():
     def __init__(self):

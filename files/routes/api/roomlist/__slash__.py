@@ -1,5 +1,5 @@
 from flask import request, jsonify, current_app as app
-from main import global_vars as gv
+from __main__ import global_vars as gv
 from flask_cors import cross_origin
 
 @app.route('/api/roomlist', methods=['GET'])

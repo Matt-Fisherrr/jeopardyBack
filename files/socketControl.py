@@ -5,7 +5,7 @@ from flask import current_app as app, request
 from fuzzywuzzy import fuzz
 import datetime, re, json
 
-from main import global_vars as gv
+from __main__ import global_vars as gv
 from __main__ import socketio
 
 # Check the ping of all players every 10 seconds
@@ -36,7 +36,7 @@ def buzzBackground(args):
             category_num, clue = map(int,catclue.split('|'))
             category_name = list(gv.room_list[room_id].board[category_num].keys())[0]
             gv.room_list[room_id].answer_count += 1
-            if gv.room_list[room_id].answer_count >= 5:
+            if gv.room_list[room_id].answer_count >= 25:
                 calculate_winner(room_id)
             socketio.emit('no_buzz', { 'screen_clicked':catclue}, room=str(room_id), namespace='/jep')
             socketio.emit('no_correct_answer', { 'position':gv.room_list[room_id].active_player, 'answer': gv.room_list[room_id].board[category_num][category_name][clue]['answer']}, room=str(room_id), namespace='/jep')
@@ -153,6 +153,7 @@ class jeopardy_socket(Namespace):
     # Sends player info and sets the player position if they were already in the room
     def on_join_room(self,message):
         try:
+            # print(gv.req_ids)
             room_id = message['room_id']
             access_token = message['access_token']
             gv.req_ids[request.sid] = gv.connected_users[access_token]
@@ -170,6 +171,8 @@ class jeopardy_socket(Namespace):
                 if gv.room_list[room_id].players[num]['auth0_code'] == gv.req_ids[request.sid]['auth0_code']:
                     gv.req_ids[request.sid]['player_num'] = num
                     gv.room_list[room_id].player_counts['count'] += 1
+
+            # print(gv.req_ids)
             
             emit('has_joined_room', { 
                 'players':gv.room_list[room_id].get_players(), 
@@ -191,6 +194,7 @@ class jeopardy_socket(Namespace):
 
     # Checks there is no one in the palyer slot and broadcasts player joining and position
     def on_player_select(self,message):
+        # print(gv.req_ids)
         position = message['position']
         room_id = gv.req_ids[request.sid]['room_id']
         auth0_code = gv.req_ids[request.sid]['auth0_code']
@@ -289,7 +293,7 @@ class jeopardy_socket(Namespace):
 
             if check_answer(answer, real_answer):
                 gv.room_list[room_id].answer_count = gv.room_list[room_id].answer_count + 1
-                if gv.room_list[room_id].answer_count >= 5:
+                if gv.room_list[room_id].answer_count >= 25:
                     calculate_winner(room_id)
                 else:
                     gv.room_list[room_id].players[pos]['score'] = gv.room_list[room_id].players[pos]['score'] + gv.room_list[room_id].board[category_num][category_name][clue]['value']
@@ -300,7 +304,7 @@ class jeopardy_socket(Namespace):
                 emit('answer_response', { 'correct':False, 'position': pos, 'new_score':gv.room_list[room_id].players[pos]['score'], 'buzzable_players':gv.room_list[room_id].buzzable_players }, room=str(room_id))
                 if len(gv.room_list[room_id].buzzable_players) == 0:
                     gv.room_list[room_id].answer_count = gv.room_list[room_id].answer_count + 1
-                    if gv.room_list[room_id].answer_count >= 5:
+                    if gv.room_list[room_id].answer_count >= 25:
                         calculate_winner(room_id)
                     emit('no_buzz', { 'screen_clicked':gv.room_list[room_id].screen_clicked }, room=str(room_id))
                     emit('no_correct_answer', { 'position':gv.room_list[room_id].active_player, 'answer': gv.room_list[room_id].board[category_num][category_name][clue]['answer']}, room=str(room_id))

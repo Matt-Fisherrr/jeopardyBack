@@ -5,7 +5,7 @@ from jose import jwt
 from .room import Room
 import hashlib, re, requests, random
 
-from main import global_vars as gv
+from __main__ import global_vars as gv
 
 @app.route('/', defaults={'path': ''})
 @app.route('/<path:path>')
