@@ -36,7 +36,7 @@ def buzzBackground(args):
             category_num, clue = map(int,catclue.split('|'))
             category_name = list(gv.room_list[room_id].board[category_num].keys())[0]
             gv.room_list[room_id].answer_count += 1
-            if gv.room_list[room_id].answer_count >= 25:
+            if gv.room_list[room_id].answer_count > 25:
                 calculate_winner(room_id)
             socketio.emit('no_buzz', { 'screen_clicked':catclue}, room=str(room_id), namespace='/jep')
             socketio.emit('no_correct_answer', { 'position':gv.room_list[room_id].active_player, 'answer': gv.room_list[room_id].board[category_num][category_name][clue]['answer']}, room=str(room_id), namespace='/jep')
@@ -81,13 +81,12 @@ def calculate_winner(room_id):
     highest_score = -99999999999
     highest_player = ''
     for player in gv.room_list[room_id].players:
-        if player == 'one' or player == 'two' or player == 'three':
-            if gv.room_list[room_id].players[player]['username'] != '':
-                if gv.room_list[room_id].players[player]['score'] > highest_score:
-                    highest_score = gv.room_list[room_id].players[player]['score']
-                    highest_player = gv.room_list[room_id].players[player]['username']
-                elif gv.room_list[room_id].players[player]['score'] == highest_score:
-                    highest_player = [highest_player, gv.room_list[room_id].players[player]['username']]
+        if gv.room_list[room_id].players[player]['username'] != '':
+            if gv.room_list[room_id].players[player]['score'] > highest_score:
+                highest_score = gv.room_list[room_id].players[player]['score']
+                highest_player = gv.room_list[room_id].players[player]['username']
+            elif gv.room_list[room_id].players[player]['score'] == highest_score:
+                highest_player = [highest_player, gv.room_list[room_id].players[player]['username']]
     gv.cur.execute("UPDATE rooms SET complete=1 WHERE room_id=%s",(room_id,))
     gv.conn.commit()
     print(highest_player)
@@ -308,7 +307,7 @@ class jeopardy_socket(Namespace):
 
             if check_answer(answer, real_answer):
                 gv.room_list[room_id].answer_count = gv.room_list[room_id].answer_count + 1
-                if gv.room_list[room_id].answer_count >= 25:
+                if gv.room_list[room_id].answer_count > 25:
                     calculate_winner(room_id)
                 else:
                     gv.room_list[room_id].players[pos]['score'] = gv.room_list[room_id].players[pos]['score'] + gv.room_list[room_id].board[category_num][category_name][clue]['value']
@@ -323,7 +322,7 @@ class jeopardy_socket(Namespace):
                 gv.conn.commit()
                 if len(gv.room_list[room_id].buzzable_players) == 0:
                     gv.room_list[room_id].answer_count = gv.room_list[room_id].answer_count + 1
-                    if gv.room_list[room_id].answer_count >= 25:
+                    if gv.room_list[room_id].answer_count > 25:
                         calculate_winner(room_id)
                     emit('no_buzz', { 'screen_clicked':gv.room_list[room_id].screen_clicked }, room=str(room_id))
                     emit('no_correct_answer', { 'position':gv.room_list[room_id].active_player, 'answer': gv.room_list[room_id].board[category_num][category_name][clue]['answer']}, room=str(room_id))
