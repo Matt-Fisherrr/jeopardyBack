@@ -19,7 +19,7 @@ if __name__ == '__main__':
         import files.routes
         from files.socketControl import jeopardy_socket
     
-    socketio.run(app, debug=True, host= '10.44.22.86')
+    socketio.run(app, debug=True, host= '0.0.0.0')
     # , host= '0.0.0.0'
 
 
