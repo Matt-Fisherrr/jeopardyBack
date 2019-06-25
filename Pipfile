@@ -14,7 +14,6 @@ eventlet = "*"
 python-jose-cryptodome = "*"
 fuzzywuzzy = "*"
 python-levenshtein = "*"
-gunicorn = "*"
 
 [requires]
 python_version = "3.7"
