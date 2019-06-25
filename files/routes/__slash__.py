@@ -1,8 +1,7 @@
 from flask import Flask, render_template, send_from_directory, current_app as app
 
-@app.route('/', defaults={'path': ''})
-@app.route('/<path:path>')
-def index(path):
+@app.route('/')
+def index():
     return "<a href='https://Jeopardy.MattFisher.ca'>Jeopardy</a>"
 
 # def index(path):
