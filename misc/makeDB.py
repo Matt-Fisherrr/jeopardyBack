@@ -1,7 +1,7 @@
 import psycopg2
 import os
 
-conn = psycopg2.connect(dbname=os.environ['DBNAME'], user=os.environ['USER'], password=os.environ['PASSWORD'], host=os.environ['HOST'])
+conn = psycopg2.connect(os.environ['DATABASE_URL'])
 cur = conn.cursor()
 
 cur.execute("DROP TABLE IF EXISTS players")
@@ -26,7 +26,8 @@ cur.execute("""CREATE TABLE rooms(
   player3score INT,
   board_id INT,
   started INT NOT NULL,
-  complete INT NOT NULL
+  complete INT NOT NULL,
+  activate_player INT NOT NULL
 );""")
 
 cur.execute("DROP TABLE IF EXISTS boards")

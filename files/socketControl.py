@@ -88,6 +88,9 @@ def calculate_winner(room_id):
                     highest_player = gv.room_list[room_id].players[player]['username']
                 elif gv.room_list[room_id].players[player]['score'] == highest_score:
                     highest_player = [highest_player, gv.room_list[room_id].players[player]['username']]
+    gv.cur.execute("UPDATE rooms SET complete=1 WHERE room_id=%s",(room_id,))
+    gv.conn.commit()
+    print(highest_player)
     socketio.emit('winner', {'username':highest_player}, room=str(room_id), namespace='/jep')
 
 # Runs the 3 second timer before buzzing in available, then 7 second timer to buzz in
@@ -152,7 +155,7 @@ class jeopardy_socket(Namespace):
 
     # Sends player info and sets the player position if they were already in the room
     def on_join_room(self,message):
-        try:
+        # try:
             # print(gv.req_ids)
             room_id = message['room_id']
             access_token = message['access_token']
@@ -183,9 +186,9 @@ class jeopardy_socket(Namespace):
                 }
             )
 
-        except Exception as e:
-            print(e)
-            emit('error')
+        # except Exception as e:
+        #     print(e)
+        #     emit('error')
 
     # Broadcasts the number of viewers
     def on_viewer_joined(self):
@@ -210,6 +213,13 @@ class jeopardy_socket(Namespace):
                 gv.room_list[room_id].player_counts['count'] = gv.room_list[room_id].player_counts.get('count',0) + 1
                 gv.room_list[room_id].player_counts['total_count'] = gv.room_list[room_id].player_counts.get('total_count',0) + 1
                 emit('player_selected',{'username':gv.req_ids[request.sid]['username'], 'position':position, 'player_id':gv.req_ids[request.sid]['player_id']}, room=str(room_id))
+                if position == 1:
+                    gv.cur.execute("UPDATE rooms SET player1=%s, player1score=%s WHERE room_id=%s",(gv.req_ids[request.sid]['auth0_code'],0,room_id))
+                elif position == 2:
+                    gv.cur.execute("UPDATE rooms SET player2=%s, player2score=%s WHERE room_id=%s",(gv.req_ids[request.sid]['auth0_code'],0,room_id))
+                elif position == 3:
+                    gv.cur.execute("UPDATE rooms SET player3=%s, player3score=%s WHERE room_id=%s",(gv.req_ids[request.sid]['auth0_code'],0,room_id))
+                gv.conn.commit()
 
     # Broad casts if player is ready and checks if all players are ready
     def on_player_ready(self, message):
@@ -225,6 +235,8 @@ class jeopardy_socket(Namespace):
             gv.room_list[room_id].started = 1
             gv.room_list[room_id].active_player = 1
             emit('ready_player', { 'position':pos,'ready':gv.room_list[room_id].players[pos]['ready'], 'started': gv.room_list[room_id].started, 'active_player': gv.room_list[room_id].active_player}, room=str(room_id))
+            gv.cur.execute("UPDATE rooms SET started=1, activate_player=1 WHERE room_id=%s",(room_id,))
+            gv.conn.commit()
         else:
             emit('ready_player', { 'position':pos,'ready':gv.room_list[room_id].players[pos]['ready'], 'started': gv.room_list[room_id].started}, room=str(room_id))
 
@@ -246,6 +258,9 @@ class jeopardy_socket(Namespace):
                 gv.room_list[room_id].selected_board = gv.room_list[room_id].screen_clicked
                 gv.room_list[room_id].buzzedPlayerTimes = {1:'',2:'',3:''}
                 emit('screen_selected', { 'category':category_num, 'clue':clue, 'screen_text': gv.room_list[room_id].board[category_num][category_name][clue]['question'], 'active_player':0, 'x_and_y':message['x_and_y']}, room=str(room_id))
+                gv.cur.execute("UPDATE clues SET answered=True WHERE api_id=%s", (gv.room_list[room_id].board[category_num][category_name][clue]['id'],))
+                gv.conn.commit()
+                # print(gv.room_list[room_id].board[category_num][category_name][clue])
                 screen_timer(room_id)
 
     # Adds players buzz in time and starts countdown for laggy player buzzes
@@ -299,9 +314,13 @@ class jeopardy_socket(Namespace):
                     gv.room_list[room_id].players[pos]['score'] = gv.room_list[room_id].players[pos]['score'] + gv.room_list[room_id].board[category_num][category_name][clue]['value']
                     gv.room_list[room_id].active_player = pos
                     emit('answer_response', { 'correct':True, 'position': pos, 'new_score': gv.room_list[room_id].players[pos]['score'] }, room=str(room_id))
+                    gv.cur.execute("UPDATE rooms SET player1score=%s, player2score=%s,player3score=%s WHERE room_id=%s", (gv.room_list[room_id].players[1]['score'], gv.room_list[room_id].players[2]['score'], gv.room_list[room_id].players[3]['score'], room_id))
+                    gv.conn.commit()
             else:
                 gv.room_list[room_id].players[pos]['score'] = gv.room_list[room_id].players[pos]['score'] - gv.room_list[room_id].board[category_num][category_name][clue]['value']
                 emit('answer_response', { 'correct':False, 'position': pos, 'new_score':gv.room_list[room_id].players[pos]['score'], 'buzzable_players':gv.room_list[room_id].buzzable_players }, room=str(room_id))
+                gv.cur.execute("UPDATE rooms SET player1score=%s, player2score=%s,player3score=%s WHERE room_id=%s", (gv.room_list[room_id].players[1]['score'], gv.room_list[room_id].players[2]['score'], gv.room_list[room_id].players[3]['score'], room_id))
+                gv.conn.commit()
                 if len(gv.room_list[room_id].buzzable_players) == 0:
                     gv.room_list[room_id].answer_count = gv.room_list[room_id].answer_count + 1
                     if gv.room_list[room_id].answer_count >= 25:

@@ -13,8 +13,8 @@ def get_board():
         board = gv.room_list[room_id].board
     except:
         print('except')
-        gv.cur.execute("SELECT board_id, room_name, player1, player1score, player2, player2score, player3, player3score, started FROM rooms WHERE room_id = %s",(room_id,))
-        board_id, room_name, player1, player1score, player2, player2score, player3, player3score, started = gv.cur.fetchone()
+        gv.cur.execute("SELECT board_id, room_name, player1, player1score, player2, player2score, player3, player3score, started, activate_player FROM rooms WHERE room_id = %s",(room_id,))
+        board_id, room_name, player1, player1score, player2, player2score, player3, player3score, started, active_player = gv.cur.fetchone()
         
         gv.room_list[room_id] = Room()
         gv.room_list[room_id].players[1]['auth0_code'] = player1
@@ -27,6 +27,13 @@ def get_board():
         gv.room_list[room_id].name = room_name
         gv.room_list[room_id].room_id = room_id
         gv.room_list[room_id].started = started
+        gv.room_list[room_id].active_player = active_player
+        gv.room_list[room_id].answer_count = 0
+
+        if started == 0:
+            gv.room_list[room_id].player_counts['total_count'] = len([p for p in gv.room_list[room_id].players if gv.room_list[room_id].players[p]['auth0_code'] != None])
+            # print(gv.room_list[room_id].player_counts['total_count'])
+
         try:
             gv.room_list[room_id].room_owner = gv.connected_users[access_token]['auth0_code']
         except:
@@ -45,6 +52,8 @@ def get_board():
                 gv.cur.execute("SELECT * FROM clues WHERE clue_id = %s", (clue,))
                 curr_clue = gv.cur.fetchone()[1:]
                 board[i][curr_cat[0]].append({ 'id':curr_clue[0], 'question':curr_clue[1], 'answer':curr_clue[2], 'value':curr_clue[3], 'answered':curr_clue[4]})
+                if curr_clue[4] == True:
+                    gv.room_list[room_id].answer_count += 1
         gv.room_list[room_id].board = board
         
     return jsonify({'board': board})

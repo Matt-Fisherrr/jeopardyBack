@@ -2,10 +2,7 @@
 
 Run `python main.py` to start.
 
-user `misc/makedb.py` to initialize database tables.
+Use `misc/makedb.py` to initialize database tables.
 
 Environment vars to set:
- - DBNAME
- - USER
- - PASSWORD
- - HOST
+ - DATABASE_URL

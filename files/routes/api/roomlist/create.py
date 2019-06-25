@@ -10,7 +10,7 @@ def make_room():
     room_name = request.get_json()['roomName']
     access_token = gv.auth.get_token_auth_header(request)
 
-    gv.cur.execute("INSERT INTO rooms(room_name, room_owner, started, complete) VALUES (%s, %s, 0, 0)",(room_name, gv.connected_users[access_token]['auth0_code']))
+    gv.cur.execute("INSERT INTO rooms(room_name, room_owner, started, complete, activate_player) VALUES (%s, %s, 0, 0, 0)",(room_name, gv.connected_users[access_token]['auth0_code']))
     gv.cur.execute('SELECT room_id FROM rooms WHERE room_name = %s',(room_name,))
     room_id = int(gv.cur.fetchone()[0])
     
