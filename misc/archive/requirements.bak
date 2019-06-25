@@ -1,6 +1,18 @@
-# This file may be used to create an environment using:
-# $ conda create --name <env> --file <this file>
-# platform: linux-64
+dnspython==1.16.0=pypi_0
+flask-session==0.3.1=pypi_0
+python-engineio==3.5.2=pypi_0
+python-levenshtein==0.12.0=pypi_0
+pycryptodome==3.3.1=pypi_0
+future==0.17.1=pypi_0
+monotonic==1.5=pypi_0
+flask-cors==3.0.7=pypi_0
+greenlet==0.4.15=pypi_0
+fuzzywuzzy==0.17.0=pypi_0
+eventlet==0.25.0=pypi_0
+flask-socketio==4.0.0=pypi_0
+python-socketio==4.0.2=pypi_0
+python-jose-cryptodome==1.3.2=pypi_0
+ecdsa==0.13.2=pypi_0
 asn1crypto=0.24.0=py37_0
 astroid=2.2.5=py37_0
 autopep8=1.4.4=py_0
