@@ -12,7 +12,7 @@ def get_board():
     try:
         board = gv.room_list[room_id].board
     except:
-        print('except')
+        # print('except')
         gv.cur.execute("SELECT board_id, room_name, player1, player1score, player2, player2score, player3, player3score, started, activate_player FROM rooms WHERE room_id = %s",(room_id,))
         board_id, room_name, player1, player1score, player2, player2score, player3, player3score, started, active_player = gv.cur.fetchone()
         
@@ -30,9 +30,8 @@ def get_board():
         gv.room_list[room_id].active_player = active_player
         gv.room_list[room_id].answer_count = 0
 
-        if started == 0:
-            gv.room_list[room_id].player_counts['total_count'] = len([p for p in gv.room_list[room_id].players if gv.room_list[room_id].players[p]['auth0_code'] != None])
-            # print(gv.room_list[room_id].player_counts['total_count'])
+        gv.room_list[room_id].player_counts['total_count'] = len([p for p in gv.room_list[room_id].players if gv.room_list[room_id].players[p]['auth0_code'] != None])
+        # print(gv.room_list[room_id].player_counts['total_count'])
 
         try:
             gv.room_list[room_id].room_owner = gv.connected_users[access_token]['auth0_code']

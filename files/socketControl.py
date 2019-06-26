@@ -154,7 +154,7 @@ class jeopardy_socket(Namespace):
 
     # Sends player info and sets the player position if they were already in the room
     def on_join_room(self,message):
-        # try:
+        try:
             # print(gv.req_ids)
             room_id = message['room_id']
             access_token = message['access_token']
@@ -185,9 +185,9 @@ class jeopardy_socket(Namespace):
                 }
             )
 
-        # except Exception as e:
-        #     print(e)
-        #     emit('error')
+        except Exception as e:
+            print(e)
+            emit('error')
 
     # Broadcasts the number of viewers
     def on_viewer_joined(self):
@@ -232,9 +232,13 @@ class jeopardy_socket(Namespace):
             gv.room_list[room_id].player_counts['ready_count'] = gv.room_list[room_id].player_counts['ready_count'] - 1
         if gv.room_list[room_id].player_counts['ready_count'] == gv.room_list[room_id].player_counts['count']:
             gv.room_list[room_id].started = 1
-            gv.room_list[room_id].active_player = 1
+            for pos in gv.room_list[room_id].players:
+                print(pos,gv.room_list[room_id].players[pos]['auth0_code'])
+                if gv.room_list[room_id].players[pos]['auth0_code'] != "":
+                    gv.room_list[room_id].active_player = pos
+                    break
             emit('ready_player', { 'position':pos,'ready':gv.room_list[room_id].players[pos]['ready'], 'started': gv.room_list[room_id].started, 'active_player': gv.room_list[room_id].active_player}, room=str(room_id))
-            gv.cur.execute("UPDATE rooms SET started=1, activate_player=1 WHERE room_id=%s",(room_id,))
+            gv.cur.execute("UPDATE rooms SET started=1, activate_player=%s WHERE room_id=%s",(gv.room_list[room_id].active_player, room_id))
             gv.conn.commit()
         else:
             emit('ready_player', { 'position':pos,'ready':gv.room_list[room_id].players[pos]['ready'], 'started': gv.room_list[room_id].started}, room=str(room_id))
@@ -243,7 +247,8 @@ class jeopardy_socket(Namespace):
     def on_screen_select(self, message):
         room_id = gv.req_ids[request.sid]['room_id']
         screen_clicked = message['screen_clicked']
-        if gv.req_ids[request.sid]['player_num'] == gv.room_list[room_id].active_player:
+        # print(gv.room_list[room_id].player_counts['count'],gv.room_list[room_id].player_counts['total_count'])
+        if gv.req_ids[request.sid]['player_num'] == gv.room_list[room_id].active_player and gv.room_list[room_id].player_counts['count'] == gv.room_list[room_id].player_counts['total_count']:
             gv.room_list[room_id].screen_clicked = screen_clicked
             category_num, clue = map(int,gv.room_list[room_id].screen_clicked.split('|'))
             category_name = list(gv.room_list[room_id].board[category_num].keys())[0]
@@ -313,7 +318,7 @@ class jeopardy_socket(Namespace):
                     gv.room_list[room_id].players[pos]['score'] = gv.room_list[room_id].players[pos]['score'] + gv.room_list[room_id].board[category_num][category_name][clue]['value']
                     gv.room_list[room_id].active_player = pos
                     emit('answer_response', { 'correct':True, 'position': pos, 'new_score': gv.room_list[room_id].players[pos]['score'] }, room=str(room_id))
-                    gv.cur.execute("UPDATE rooms SET player1score=%s, player2score=%s,player3score=%s WHERE room_id=%s", (gv.room_list[room_id].players[1]['score'], gv.room_list[room_id].players[2]['score'], gv.room_list[room_id].players[3]['score'], room_id))
+                    gv.cur.execute("UPDATE rooms SET player1score=%s, player2score=%s, player3score=%s, activate_player=%s WHERE room_id=%s", (gv.room_list[room_id].players[1]['score'], gv.room_list[room_id].players[2]['score'], gv.room_list[room_id].players[3]['score'], gv.room_list[room_id].active_player, room_id))
                     gv.conn.commit()
             else:
                 gv.room_list[room_id].players[pos]['score'] = gv.room_list[room_id].players[pos]['score'] - gv.room_list[room_id].board[category_num][category_name][clue]['value']
