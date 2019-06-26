@@ -5,7 +5,7 @@ from flask_cors import CORS
 
 app = Flask(__name__, static_folder="build/static", template_folder="build")
 app.secret_key = 'app secret key'
-CORS(app)
+# CORS(app)
 socketio = SocketIO(app, async_mode='eventlet')
 
 
