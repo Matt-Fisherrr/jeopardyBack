@@ -33,6 +33,7 @@ def buzzBackground(args):
         catclue = args['screen_clicked']
         socketio.sleep(7)
         if gv.room_list[room_id].buzzedIn == 0:
+            gv.room_list[room_id].buzzable_players = []
             category_num, clue = map(int,catclue.split('|'))
             category_name = list(gv.room_list[room_id].board[category_num].keys())[0]
             gv.room_list[room_id].answer_count += 1
